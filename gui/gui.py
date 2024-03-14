@@ -125,11 +125,14 @@ from functions_tests_dps import dps_db_internal_tests
 from functions_tests_dps import check_repetition
 from functions_tests_dps import dps_dpd_db_internal_tests
 
+from pass2 import pass2_gui, Pass2Data
+from pass2 import start_from_where_gui
+
 from db.get_db_session import get_db_session
 from scripts.backup_dpd_headwords_and_roots import backup_dpd_headwords_and_roots
 from scripts.backup_ru_sbs import backup_ru_sbs
 
-from exporter.i2html import make_html
+from tools.i2html import make_html
 from tests.test_allowable_characters import test_allowable_characters_gui
 from tests.test_allowable_characters import test_allowable_characters_gui_dps
 
@@ -173,7 +176,7 @@ def main():
             text_color="white")
         words_to_add_list = []
 
-    flags = Flags()
+    flags: Flags = Flags()
     dps_flags = Flags_dps()
     if username == "primary_user":
         get_next_ids(db_session, window)
@@ -337,6 +340,25 @@ def main():
                 words_to_add_list = remove_word_to_add(
                     values, window, words_to_add_list)
                 window["words_to_add_length"].update(value=len(words_to_add_list))
+        
+        # pass2
+        elif (
+            event == "pass2_button"
+            or event == "pass2_button0"
+            or event == "control_p"
+        ):
+            if flags.pass2_start:
+                book = values["book_to_add"]
+                window["messages"].update(
+                    value="loading pass2 data...", text_color="white")
+                p2d = Pass2Data(pth, db_session, window, values, book)
+                start_from_where_gui(p2d)
+                flags.pass2_start = False
+                p2d, wd = pass2_gui(p2d)
+            else:
+                p2d.db_session = db_session
+                p2d, wd = pass2_gui(p2d)
+
 
         # DPD edit tab
 
@@ -1047,10 +1069,7 @@ def main():
         ):
             unstasher(pth, window)
 
-        elif (
-            event == "split_button"
-            or event == "control_p"
-        ):
+        elif event == "split_button":
             lemma_1_old, lemma_1_new = increment_lemma_1(values)
             if username == "deva":
                 # add number 1 to lemma_1 for old word if there is no digit

@@ -38,7 +38,7 @@ from functions import make_sandhi_ok_list
 from functions import make_variant_list
 
 from functions_daily_record import daily_record_update
-from exporter.i2html import make_html
+from tools.i2html import make_html
 
 from rich import print
 from sqlalchemy import not_, or_
@@ -140,7 +140,11 @@ def populate_dps_tab(dpspth, values, window, dpd_word, ru_word, sbs_word):
         root += f"{dpd_word.rt.root_has_verb} "
         root += f"{dpd_word.rt.root_group} "
         root += f"{dpd_word.root_sign} "
-        root += f"({dpd_word.rt.root_meaning})"
+        root += f"({dpd_word.rt.root_meaning} "
+        root += f"{dpd_word.rt.root_ru_meaning})"
+        if dpd_word.rt.sanskrit_root_ru_meaning:
+            root += f"sk {dpd_word.rt.sanskrit_root_ru_meaning}"
+
     window["dps_root"].update(root)
 
     # base_or_comp

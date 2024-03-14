@@ -1,12 +1,10 @@
-
-import cProfile
-import sys
+"""Flask app for browswer-based DPD lookup."""
 
 from flask import Flask, render_template
 from markupsafe import Markup
 from flask import request
 from flask_sqlalchemy import SQLAlchemy
-from db.models import DpdHeadwords, InflectionToHeadwords, SBS, Russian
+from db.models import DpdHeadwords, Lookup, SBS, Russian
 from tools.paths import ProjectPaths
 
 from rich import print
@@ -77,14 +75,14 @@ def home():
     result = []
     html = ""
     if query:
-        result = db.session.query(InflectionToHeadwords)\
-            .filter(InflectionToHeadwords.inflection==(query))\
+        result = db.session.query(Lookup)\
+            .filter(Lookup.lookup_key==(query))\
             .first()
         if result:
-            headwords = result.headwords_list
+            headwords = result.headwords_unpack
             results = db.session\
                 .query(DpdHeadwords)\
-                .filter(DpdHeadwords.lemma_1.in_(headwords))\
+                .filter(DpdHeadwords.id.in_(headwords))\
                 .all()
             for i in results:
                 fc = get_family_compounds(i)
@@ -114,10 +112,4 @@ def safe_getattr(obj, attr, default=None):
     return value
 
 
-print("Before profiling")
-sys.stdout = open('profiler_output.txt', 'w')
-cProfile.run('run_app()')
-sys.stdout.close()
-sys.stdout = sys.__stdout__
-print("After profiling")
-  
+run_app()

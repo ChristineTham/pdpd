@@ -4,15 +4,21 @@
 
 git fetch
 
-git checkout origin/main -- backup_tsv/dpd_headwords.tsv
+git checkout origin/main -- db/backup_tsv/dpd_headwords.tsv
 
-git checkout origin/main -- backup_tsv/dpd_roots.tsv
-
-scripts/backup_ru_sbs.py
+# git checkout origin/main -- db/backup_tsv/dpd_roots.tsv
 
 dps/scripts/backup_all_dps.py
 
-dps/scripts/move_new_words.py
+# Define filenames
+FILENAMES=("sbs.tsv" "russian.tsv" "dpd_roots.tsv")
+
+# Copy files from dps/backup/ to backup_tsv/
+for file in "${FILENAMES[@]}"; do
+    cp -rf ./dps/backup/$file ./backup_tsv/$file
+done
+
+# dps/scripts/move_new_words.py
 
 scripts/db_update_from_tsv.py
 
@@ -22,4 +28,4 @@ mkdpd.sh
 
 git checkout -- pyproject.toml
 
-git checkout -- backup_tsv/dpd_headwords.tsv
+git checkout -- db/backup_tsv/dpd_headwords.tsv
