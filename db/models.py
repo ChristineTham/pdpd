@@ -1,4 +1,4 @@
-"""Datebase model for use by SQLAlchemy."""
+"""Database model for use by SQLAlchemy."""
 import json
 import re
 
@@ -7,28 +7,28 @@ from typing import Optional
 
 from sqlalchemy import and_
 from sqlalchemy import case
-from sqlalchemy import null
 from sqlalchemy import Column
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
-from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import Integer
+from sqlalchemy import null
 from sqlalchemy.ext.hybrid import hybrid_property
 
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import declared_attr
+from sqlalchemy.orm import foreign
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
-from sqlalchemy.orm import declared_attr
 from sqlalchemy.orm import object_session
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from tools.cache_load import load_cf_set, load_idioms_set
 from tools.link_generator import generate_link
 from tools.pali_sort_key import pali_sort_key
 from tools.pos import CONJUGATIONS
 from tools.pos import DECLENSIONS
 from tools.pos import EXCLUDE_FROM_FREQ
+from tools.sinhala_tools import si_grammar, pos_si, pos_si_full, translit_ro_to_si
 
 from dps.tools.sbs_table_functions import SBS_table_tools
 
@@ -38,23 +38,34 @@ class Base(DeclarativeBase):
 
 
 class DbInfo(Base):
-    """Storing general key-value data such as dpd_release_version and cached
-    values, e.g. cf_set and so on."""
-    __tablename__ = "db_info"
+    """
+    Store general key-value data such as
+    1. dpd_db info, release_version, etc 
+    2. cached values, cf_set, etc.
+    """
 
+    __tablename__ = "db_info"
     id: Mapped[int] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(unique=True)
     value: Mapped[str] = mapped_column(default='')
 
+    # value pack unpack
+    def value_pack(self, data) -> None:
+        self.value = json.dumps(data, ensure_ascii=False)
+
+    @property
+    def value_unpack(self) -> list[str]:
+        return json.loads(self.value)
 
 class InflectionTemplates(Base):
-    __tablename__ = "inflection_templates"
+    """Inflection templates for generating html tables."""
 
+    __tablename__ = "inflection_templates"
     pattern: Mapped[str] = mapped_column(primary_key=True)
     like: Mapped[str] = mapped_column(default='')
     data: Mapped[str] = mapped_column(default='')
 
-    # infletcion templates pack unpack
+    # inflection templates pack unpack
     def inflection_template_pack(self, list: list[str]) -> None:
         self.data = json.dumps(list, ensure_ascii=False)
 
@@ -66,7 +77,7 @@ class InflectionTemplates(Base):
         return f"InflectionTemplates: {self.pattern} {self.like} {self.data}"
 
 
-class DpdRoots(Base):
+class DpdRoot(Base):
     __tablename__ = "dpd_roots"
 
     root: Mapped[str] = mapped_column(primary_key=True)
@@ -106,7 +117,7 @@ class DpdRoots(Base):
     updated_at: Mapped[Optional[DateTime]] = mapped_column(
         DateTime(timezone=True), onupdate=func.now())
 
-    pw: Mapped[List["DpdHeadwords"]] = relationship(
+    pw: Mapped[List["DpdHeadword"]] = relationship(
         back_populates="rt")
 
     @property
@@ -121,7 +132,14 @@ class DpdRoots(Base):
 
     @property
     def root_(self) -> str:
+        """Replace whitespace with underscores"""
         return self.root.replace(" ", "_")
+
+    @property
+    def root_no_sign_(self) -> str:
+        """Remove root sign and replace whitespace with underscores.
+        Useful for html links."""
+        return self.root.replace(" ", "_").replace("√", "")
 
     @property
     def root_link(self) -> str:
@@ -134,8 +152,8 @@ class DpdRoots(Base):
             raise Exception("No db_session")
 
         return db_session \
-            .query(DpdHeadwords) \
-            .filter(DpdHeadwords.root_key == self.root) \
+            .query(DpdHeadword) \
+            .filter(DpdHeadword.root_key == self.root) \
             .count()
 
     @property
@@ -145,16 +163,16 @@ class DpdRoots(Base):
             raise Exception("No db_session")
 
         results = db_session \
-            .query(DpdHeadwords) \
-            .filter(DpdHeadwords.root_key == self.root) \
-            .group_by(DpdHeadwords.family_root) \
+            .query(DpdHeadword) \
+            .filter(DpdHeadword.root_key == self.root) \
+            .group_by(DpdHeadword.family_root) \
             .all()
         family_list = [i.family_root for i in results if i.family_root is not None]
         family_list = sorted(family_list, key=lambda x: pali_sort_key(x))
         return family_list
 
     def __repr__(self) -> str:
-        return f"""DpdRoots: {self.root} {self.root_group} {self.root_sign} ({self.root_meaning})"""
+        return f"""DpdRoot: {self.root} {self.root_group} {self.root_sign} ({self.root_meaning})"""
 
 
 class FamilyRoot(Base):
@@ -166,22 +184,25 @@ class FamilyRoot(Base):
     html: Mapped[str] = mapped_column(default='')
     data: Mapped[str] = mapped_column(default='')
     count: Mapped[int] = mapped_column(default=0)
+    root_ru_meaning: Mapped[str] = mapped_column(default='')
     html_ru: Mapped[str] = mapped_column(default='')
+    data_ru: Mapped[str] = mapped_column(default='')
 
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["root_key", "root_family"],
-            ["dpd_headwords.root_key", "dpd_headwords.family_root"]
-        ),
-    )
 
     # root family pack unpack
     def data_pack(self, list: list[str]) -> None:
         self.data = json.dumps(list, ensure_ascii=False, indent=1)
 
+    def data_ru_pack(self, list: list[str]) -> None:
+        self.data_ru = json.dumps(list, ensure_ascii=False, indent=1)
+
     @property
     def data_unpack(self) -> list[str]:
         return json.loads(self.data)
+
+    @property
+    def data_ru_unpack(self) -> list[str]:
+        return json.loads(self.data_ru)
 
     @property
     def root_family_link(self) -> str:
@@ -200,6 +221,12 @@ class FamilyRoot(Base):
     def root_family_clean_no_space(self) -> str:
         """Remove root sign and space"""
         return self.root_family.replace("√", "").replace(" ", "")
+    
+    @property
+    def root_family_key_typst(self) -> str:
+        return self.root_family_key \
+            .replace(" ", "_") \
+            .replace("√", "")
 
     def __repr__(self) -> str:
         return f"FamilyRoot: {self.root_family_key} {self.count}"
@@ -218,6 +245,7 @@ class Lookup(Base):
     help: Mapped[str] = mapped_column(default='')
     abbrev: Mapped[str] = mapped_column(default='')
     epd: Mapped[str] = mapped_column(default='')
+    rpd: Mapped[str] = mapped_column(default='')
     other: Mapped[str] = mapped_column(default='')
     sinhala: Mapped[str] = mapped_column(default='')
     devanagari: Mapped[str] = mapped_column(default='')
@@ -300,8 +328,8 @@ class Lookup(Base):
     
     # grammar pack unpack
     # TODO add a method to unpack to html
-
-    def grammar_pack(self, list: list[tuple[str]]) -> None:
+    
+    def grammar_pack(self, list: list[tuple[str, str, str]]) -> None:
         if list:
             self.grammar = json.dumps(list, ensure_ascii=False)
         else:
@@ -326,10 +354,11 @@ class Lookup(Base):
 
     @property
     def help_unpack(self) -> str:
-        if self.abbrev:
+        if self.help:
             return json.loads(self.help)
         else:
             return ""
+
 
     # abbreviations pack unpack
 
@@ -347,6 +376,38 @@ class Lookup(Base):
         else:
             return {}
 
+    # epd pack unpack
+
+    def epd_pack(self, list: list[tuple[str, str, str]]) -> None:
+        if dict:
+            self.epd = json.dumps(
+                list, ensure_ascii=False, indent=1)
+        else:
+            raise ValueError("A dict must be provided to pack.")
+
+    @property
+    def epd_unpack(self) -> list[tuple[str, str, str]]:
+        if self.epd:
+            return json.loads(self.epd)
+        else:
+            return []
+
+    # rpd pack unpack
+
+    def rpd_pack(self, list: list[tuple[str, str, str]]) -> None:
+        if dict:
+            self.rpd = json.dumps(
+                list, ensure_ascii=False, indent=1)
+        else:
+            raise ValueError("A dict must be provided to pack.")
+
+    @property
+    def rpd_unpack(self) -> list[tuple[str, str, str]]:
+        if self.rpd:
+            return json.loads(self.rpd)
+        else:
+            return []
+    
     # pack unpack sinhala
     
     def sinhala_pack(self, list: list[str]) -> None:
@@ -475,7 +536,7 @@ thai:          {self.thai}
 #         DateTime(timezone=True), onupdate=func.now())
 
 
-class DpdHeadwords(Base):
+class DpdHeadword(Base):
     __tablename__ = "dpd_headwords"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -547,23 +608,26 @@ class DpdHeadwords(Base):
     # derived data 
 
     inflections: Mapped[str] = mapped_column(default='')
+    inflections_api_ca_eva_iti: Mapped[str] = mapped_column(default='')
     inflections_sinhala: Mapped[str] = mapped_column(default='')
     inflections_devanagari: Mapped[str] = mapped_column(default='')
     inflections_thai: Mapped[str] = mapped_column(default='')
     inflections_html: Mapped[str] = mapped_column(default='')
+    freq_data: Mapped[str] = mapped_column(default='')
     freq_html: Mapped[str] = mapped_column(default='')
-    ebt_count: Mapped[int] = mapped_column(default='')
+    ebt_count: Mapped[int] = mapped_column(default=0, server_default="0")
 
     # pali_root
-    rt: Mapped[DpdRoots] = relationship(uselist=False)
+    rt: Mapped[DpdRoot] = relationship(uselist=False)
 
-    # family_root
     fr = relationship(
-        FamilyRoot, 
+        "FamilyRoot",
         primaryjoin=and_(
-            root_key==FamilyRoot.root_key, 
-            family_root==FamilyRoot.root_family),
-        uselist=False 
+            root_key == foreign(FamilyRoot.root_key),
+            family_root == foreign(FamilyRoot.root_family)
+        ),
+        uselist=False,
+        sync_backref=False
     )
 
     #  FamilyWord
@@ -572,8 +636,11 @@ class DpdHeadwords(Base):
     # sbs
     sbs = relationship("SBS", uselist=False)
 
-    # russion
+    # russian
     ru = relationship("Russian", uselist=False)
+
+    # sinhala
+    si = relationship("Sinhala", uselist=False)
 
     # inflection templates
     it: Mapped[InflectionTemplates] = relationship()
@@ -605,6 +672,90 @@ class DpdHeadwords(Base):
         return re.sub(r" \d.*$", "", self.lemma_1)
 
     @property
+    def lemma_ipa(self) -> str:
+        from tools.ipa import convert_uni_to_ipa
+        return convert_uni_to_ipa(self.lemma_clean, "ipa")
+
+    @property
+    def lemma_tts(self) -> str:
+        from tools.ipa import convert_uni_to_ipa
+        return convert_uni_to_ipa(self.lemma_clean, "tts")
+
+    # meaning construction
+
+    @property
+    def meaning_combo(self) -> str:
+        from tools.meaning_construction import make_meaning_combo
+        return make_meaning_combo(self)
+    
+    @property
+    def meaning_combo_html(self) -> str:
+        from tools.meaning_construction import make_meaning_combo_html
+        return make_meaning_combo_html(self)
+
+    @property
+    def root_base_clean(self) -> str:
+        from tools.meaning_construction import clean_construction
+        return clean_construction(self.root_base)
+
+    @property
+    def construction_summary(self) -> str:
+        from tools.meaning_construction import summarize_construction
+        return summarize_construction(self)
+
+    @property
+    def construction_clean(self) -> str:
+        from tools.meaning_construction import clean_construction
+        return clean_construction(self.construction)
+    
+    @property
+    def degree_of_completion_html(self) -> str:
+        from tools.meaning_construction import degree_of_completion
+        return degree_of_completion(self)
+
+    @property
+    def degree_of_completion(self) -> str:
+        from tools.meaning_construction import degree_of_completion
+        return degree_of_completion(self, html=False)
+
+    # sinhala
+
+    @property
+    def lemma_trad(self) -> str:
+        from tools.lemma_traditional import make_lemma_trad
+        return make_lemma_trad(self)
+    
+    @property
+    def lemma_si(self) -> str:
+        from tools.lemma_traditional import make_lemma_trad_si
+        return make_lemma_trad_si(self)
+    
+    @property
+    def plus_case_si(self) -> str:
+        return si_grammar(self.plus_case)
+    
+    @property
+    def pos_si(self) -> str:
+        return pos_si(self.pos)
+    
+    @property
+    def pos_si_full(self) -> str:
+        return pos_si_full(self.pos)
+
+    @property
+    def meaning_si(self) -> str:
+        return self.si.meaning_si if self.si else ""
+    
+    @property
+    def construction_summary_si(self) -> str:
+        from tools.meaning_construction import summarize_construction
+        construction = summarize_construction(self)
+        construction = construction.replace("*", "ṇ")
+        return translit_ro_to_si(construction)
+    
+    # root
+
+    @property
     def root_clean(self) -> str:
         try:
             if self.root_key is None:
@@ -627,21 +778,21 @@ class DpdHeadwords(Base):
         if self.family_compound:
             return self.family_compound.split(" ")
         else:
-            return [self.family_compound]
+            return [self.lemma_clean]
 
     @property
     def family_idioms_list(self) -> list:
         if self.family_idioms:
             return self.family_idioms.split(" ")
         else:
-            return [self.family_idioms]
+            return [self.lemma_clean]
 
     @property
     def family_set_list(self) -> list:
         if self.family_set:
             return self.family_set.split("; ")
         else:
-            return [self.family_set]
+            return []
 
     @property
     def root_count(self) -> int:
@@ -650,8 +801,8 @@ class DpdHeadwords(Base):
             raise Exception("No db_session")
 
         return db_session\
-            .query(DpdHeadwords.id)\
-            .filter(DpdHeadwords\
+            .query(DpdHeadword.id)\
+            .filter(DpdHeadword\
             .root_key == self.root_key)\
             .count()
 
@@ -662,8 +813,8 @@ class DpdHeadwords(Base):
             raise Exception("No db_session")
 
         pos_db = db_session \
-            .query(DpdHeadwords.pos) \
-            .group_by(DpdHeadwords.pos) \
+            .query(DpdHeadword.pos) \
+            .group_by(DpdHeadword.pos) \
             .all()
         return sorted([i.pos for i in pos_db])
 
@@ -672,21 +823,21 @@ class DpdHeadwords(Base):
         if self.antonym:
             return self.antonym.split(", ")
         else:
-            return [self.antonym]
+            return []
 
     @property
     def synonym_list(self) -> list:
         if self.synonym:
             return self.synonym.split(", ")
         else:
-            return [self.synonym]
+            return []
 
     @property
     def variant_list(self) -> list:
         if self.variant:
             return self.variant.split(", ")
         else:
-            return [self.variant]
+            return []
 
     @property
     def source_link_1(self) -> str:
@@ -731,33 +882,161 @@ class DpdHeadwords(Base):
     # derived data properties
 
     @property
-    def inflections_list(self) -> list:
+    def inflections_list(self) -> list[str]:
         if self.inflections:
             return self.inflections.split(",")
         else:
             return []
 
     @property
-    def inflections_sinhala_list(self) -> list:
+    def inflections_list_api_ca_eva_iti(self) -> list[str]:
+        if self.inflections_api_ca_eva_iti:
+            return self.inflections_api_ca_eva_iti.split(",")
+        else:
+            return []
+
+    @property
+    def inflections_list_all(self) -> list[str]:
+        all_inflections = []
+        all_inflections.extend(self.inflections.split(","))
+        all_inflections.extend(self.inflections_api_ca_eva_iti.split(","))
+        return all_inflections
+
+    @property
+    def inflections_sinhala_list(self) -> list[str]:
         if self.inflections_sinhala:
             return self.inflections_sinhala.split(",")
         else:
             return []
 
     @property
-    def inflections_devanagari_list(self) -> list:
+    def inflections_devanagari_list(self) -> list[str]:
         if self.inflections_devanagari:
             return self.inflections_devanagari.split(",")
         else:
             return []
 
     @property
-    def inflections_thai_list(self) -> list:
+    def inflections_thai_list(self) -> list[str]:
         if self.inflections_thai:
             return self.inflections_thai.split(",")
         else:
             return []
+    
+    @property
+    def freq_data_unpack(self) -> dict[str, int]:
+        if self.freq_data:
+            return json.loads(self.freq_data)
+        else:
+            return {}
+        
+    # typst
 
+    @property
+    def meaning_1_typst(self) -> str:
+        return self.meaning_1 \
+            .replace("*", r"\*")
+
+    @property
+    def meaning_2_typst(self) -> str:
+        return self.meaning_2 \
+            .replace("*", r"\*")
+
+    @property
+    def sanskrit_typst(self) -> str:
+        return self.sanskrit \
+            .replace("[", r"\[") \
+            .replace("]", r"\]")
+    
+    @property
+    def root_family_key_typst(self) -> str:
+        return self.root_family_key \
+            .replace(" ", "_") \
+            .replace("√", "")
+
+    @property
+    def root_base_typst(self) -> str:
+        return self.root_base.replace("*", "\\*")
+    
+    @property
+    def root_sign_typst(self) -> str:
+        return self.root_sign.replace("*", "\\*")
+
+    @property
+    def construction_typst(self) -> str:
+        return self.construction.replace("\n", r"\ ").replace("*", "\\*")
+
+    @property
+    def construction_summary_typst(self) -> str:
+        from tools.meaning_construction import summarize_construction
+        return summarize_construction(self).replace("*", "\\*")
+
+    @property
+    def suffix_typst(self) -> str:
+        return self.suffix.replace("*", "\\*")
+
+    @property
+    def compound_construction_typst(self) -> str:
+        return self.compound_construction \
+            .replace("*", "\\*") \
+            .replace("<b>", "#strong[") \
+            .replace("</b>", "]")
+
+    @property
+    def phonetic_typst(self) -> str:
+        return self.phonetic.replace("\n", r"\ ")
+    
+    @property
+    def commentary_typst(self) -> str:
+        return self.commentary\
+            .replace("\n", r"\ ") \
+            .replace("<b>", "#strong[") \
+            .replace("</b>", "]")
+
+    @property
+    def notes_typst(self) -> str:
+        return self.notes\
+            .replace("*", r"\*") \
+            .replace("\n", r"\ ") \
+            .replace("<b>", "#strong[") \
+            .replace("</b>", "]") \
+            .replace("<i>", "_") \
+            .replace("</i>", "_")
+
+    @property
+    def cognate_typst(self) -> str:
+        return self.cognate.replace("*", "\\*")
+    
+    @property
+    def link_typst(self) -> str:
+        link_string:str = ""
+        for website in self.link.split(" "):
+            link_string += f"""#link("{website}")\\n"""
+        return link_string
+
+    @property
+    def example_1_typst(self) -> str:
+        return self.example_1 \
+            .replace("\n", r"\ ") \
+            .replace("<b>", "#strong[") \
+            .replace("</b>", "]") \
+
+    @property
+    def example_2_typst(self) -> str:
+        return self.example_2 \
+            .replace("\n", r"\ ") \
+            .replace("<b>", "#strong[") \
+            .replace("</b>", "]")
+
+    @property
+    def sutta_1_typst(self) -> str:
+        return self.sutta_1.replace("\n", ", ")
+    
+    @property
+    def sutta_2_typst(self) -> str:
+        return self.sutta_2.replace("\n", ", ") \
+    
+    
     # needs_button
 
     @property
@@ -796,10 +1075,12 @@ class DpdHeadwords(Base):
 
     @property
     def cf_set(self) -> set[str]:
+        from tools.cache_load import load_cf_set
         return load_cf_set()
 
     @property
     def idioms_set(self) -> set[str]:
+        from tools.cache_load import load_idioms_set
         return load_idioms_set( )
     
     @property
@@ -807,12 +1088,19 @@ class DpdHeadwords(Base):
         return bool(
             self.meaning_1
             and " " not in self.family_compound
+            and "sandhi" not in self.pos
+            and "idiom" not in self.pos
+            and "?" not in self.compound_type
             and(
-                any(item in self.cf_set for item in self.family_compound_list) or
-                self.lemma_clean in self.cf_set #type:ignore
-            ))
+                any(item in self.cf_set for item in self.family_compound_list) 
+                or (
+                    self.lemma_clean in self.cf_set #type:ignore
+                    and not self.family_compound
+                )
+            )
+        )
 
-        # alternative logix
+        # alternative logic
         # i.meaning_1
         # and i.lemma_clean in cf_set) 
         # or (
@@ -826,23 +1114,32 @@ class DpdHeadwords(Base):
         return bool(
             self.meaning_1
             and " " in self.family_compound
+            and "sandhi" not in self.pos
+            and "idiom" not in self.pos
+            and len(self.lemma_clean) < 30
             and(
                 any(item in self.cf_set for item in self.family_compound_list)
-                or self.lemma_clean in self.cf_set)) #type:ignore
+                or (
+                    self.lemma_clean in self.cf_set #type:ignore
+                    and not self.family_compound
+                )
+            )
+        )
 
     @property
     def needs_idioms_button(self) -> bool:
         return bool(
             self.meaning_1
             and(
-                any(item in self.idioms_set for item in self.family_idioms_list) or
-                self.lemma_clean in self.idioms_set #type:ignore
+                any(
+                    item in self.idioms_set
+                    for item in self.family_idioms_list
+                )
+                or (
+                    not self.family_idioms_list
+                    and self.lemma_clean in self.idioms_set
+                )
             ))
-
-    # alternative logix
-    # if ((i.meaning_1 and i.lemma_clean in idioms_set) 
-    #     or (i.family_idioms and any(item in idioms_set 
-    #             for item in i.family_idioms_list)))
 
     @property
     def needs_set_button(self) -> bool:
@@ -863,8 +1160,10 @@ class DpdHeadwords(Base):
         return bool(self.pos not in EXCLUDE_FROM_FREQ)
 
     def __repr__(self) -> str:
-        return f"""DpdHeadwords: {self.id} {self.lemma_1} {self.pos} {
+        return f"""DpdHeadword: {self.id} {self.lemma_1} {self.pos} {
             self.meaning_1}"""
+    
+
 
 
 class FamilyCompound(Base):
@@ -874,14 +1173,22 @@ class FamilyCompound(Base):
     data: Mapped[str] = mapped_column(default='')
     count: Mapped[int] = mapped_column(default=0)
     html_ru: Mapped[str] = mapped_column(default='')
+    data_ru: Mapped[str] = mapped_column(default='')
 
     # family_compound pack unpack
     def data_pack(self, list: list[str]) -> None:
         self.data = json.dumps(list, ensure_ascii=False, indent=1)
 
+    def data_ru_pack(self, list: list[str]) -> None:
+        self.data_ru = json.dumps(list, ensure_ascii=False, indent=1)
+
     @property
     def data_unpack(self) -> list[str]:
         return json.loads(self.data)
+
+    @property
+    def data_ru_unpack(self) -> list[str]:
+        return json.loads(self.data_ru)
 
     def __repr__(self) -> str:
         return f"FamilyCompound: {self.compound_family} {self.count}"
@@ -894,9 +1201,24 @@ class FamilyWord(Base):
     data: Mapped[str] = mapped_column(default='')
     count: Mapped[int] = mapped_column(default=0)
     html_ru: Mapped[str] = mapped_column(default='')
+    data_ru: Mapped[str] = mapped_column(default='')
 
-    dpd_headwords: Mapped[List["DpdHeadwords"]] = relationship("DpdHeadwords", back_populates="fw")
+    dpd_headwords: Mapped[List["DpdHeadword"]] = relationship("DpdHeadword", back_populates="fw")
 
+    # family_word pack unpack
+    def data_pack(self, list: list[str]) -> None:
+        self.data = json.dumps(list, ensure_ascii=False, indent=1)
+
+    def data_ru_pack(self, list: list[str]) -> None:
+        self.data_ru = json.dumps(list, ensure_ascii=False, indent=1)
+
+    @property
+    def data_unpack(self) -> list[str]:
+        return json.loads(self.data)
+
+    @property
+    def data_ru_unpack(self) -> list[str]:
+        return json.loads(self.data_ru)
 
     def __repr__(self) -> str:
         return f"FamilyWord: {self.word_family} {self.count}"
@@ -910,14 +1232,22 @@ class FamilySet(Base):
     count: Mapped[int] = mapped_column(default=0)
     set_ru: Mapped[str] = mapped_column(default='')
     html_ru: Mapped[str] = mapped_column(default='')
+    data_ru: Mapped[str] = mapped_column(default='')
 
     # family_set pack unpack
     def data_pack(self, list: list[str]) -> None:
         self.data = json.dumps(list, ensure_ascii=False, indent=1)
 
+    def data_ru_pack(self, list: list[str]) -> None:
+        self.data_ru = json.dumps(list, ensure_ascii=False, indent=1)
+
     @property
     def data_unpack(self) -> list[str]:
         return json.loads(self.data)
+
+    @property
+    def data_ru_unpack(self) -> list[str]:
+        return json.loads(self.data_ru)
 
     def __repr__(self) -> str:
         return f"FamilySet: {self.set} {self.count}"
@@ -930,17 +1260,25 @@ class FamilyIdiom(Base):
     data: Mapped[str] = mapped_column(default='')
     count: Mapped[int] = mapped_column(default=0)
     html_ru: Mapped[str] = mapped_column(default='')
+    data_ru: Mapped[str] = mapped_column(default='')
 
     # idioms data pack unpack
     def data_pack(self, list: list[str]) -> None:
         self.data = json.dumps(list, ensure_ascii=False, indent=1)
 
+    def data_ru_pack(self, list: list[str]) -> None:
+        self.data_ru = json.dumps(list, ensure_ascii=False, indent=1)
+
     @property
-    def unpack_idioms_data(self) -> list[str]:
+    def data_unpack(self) -> list[str]:
         return json.loads(self.data)
 
+    @property
+    def data_ru_unpack(self) -> list[str]:
+        return json.loads(self.data_ru)
+
     def __repr__(self) -> str:
-        return f"FamilySet: {self.idiom} {self.count}"
+        return f"FamilyIdiom: {self.idiom} {self.count}"
 
 
 class SBS(Base):
@@ -951,6 +1289,7 @@ class SBS(Base):
     sbs_class_anki: Mapped[int] = mapped_column(default='')
     sbs_class: Mapped[int] = mapped_column(default='')
     sbs_category: Mapped[str] = mapped_column(default='')
+    sbs_patimokkha: Mapped[str] = mapped_column(default='')
     sbs_meaning: Mapped[str] = mapped_column(default='')
     sbs_notes: Mapped[str] = mapped_column(default='')
     sbs_source_1: Mapped[str] = mapped_column(default='')
@@ -1036,6 +1375,11 @@ class SBS(Base):
     def sbs_sutta_link(self):
         sutta_link_map = SBS_table_tools().load_sutta_link_map()
         return sutta_link_map.get(self.sbs_category, "")
+
+    @property
+    def sbs_patimokkha_link(self):
+        patimokkha_link_map = SBS_table_tools().load_sutta_link_map()
+        return patimokkha_link_map.get(self.sbs_patimokkha, "")
     
     @property
     def sbs_source_link_1(self) -> str:
@@ -1075,10 +1419,22 @@ class Russian(Base):
 
     def __repr__(self) -> str:
         return f"Russian: {self.id} {self.ru_meaning}"
+    
+
+class Sinhala(Base):
+    __tablename__ = "sinhala"
+
+    id: Mapped[int] = mapped_column(
+        ForeignKey('dpd_headwords.id'), primary_key=True)
+    si_meaning: Mapped[str] = mapped_column(default="")
+    checked: Mapped[str] = mapped_column(default='')
+
+    def __repr__(self) -> str:
+        return f"Sinhala: {self.id} {self.si_meaning}"
 
 
-class BoldDefintion(Base):
-    __tablename__ = "bold_defintions"
+class BoldDefinition(Base):
+    __tablename__ = "bold_definitions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     file_name: Mapped[str] = mapped_column(default='')
@@ -1091,7 +1447,7 @@ class BoldDefintion(Base):
     bold_end: Mapped[str] = mapped_column(default='')
     commentary: Mapped[str] = mapped_column(default='')
 
-    def update_bold_defintion(
+    def update_bold_definition(
         self, file_name, ref_code, nikaya, book, title, subhead,
 			bold, bold_end, commentary):
         self.file_name = file_name

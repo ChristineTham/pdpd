@@ -4,23 +4,23 @@
 
 import pandas as pd
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 from tools.paths import ProjectPaths
 from tools.tsv_read_write import write_tsv_list
-from tools.meaning_construction import make_meaning
+from tools.meaning_construction import make_meaning_combo
 
 def main():
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
-    db = db_session.query(DpdHeadwords).all()
+    db = db_session.query(DpdHeadword).all()
     data = []
     for counter, i in enumerate(db):
-        meaning = make_meaning(i)
+        meaning = make_meaning_combo(i)
         if i.meaning_1:
-            test = "✓"
+            test = "✔"
         else:
-            test = "✗"
+            test = "✘"
         
         row = [i.id, i.lemma_1, i.pos, meaning, test, ""]
         data.append(row)

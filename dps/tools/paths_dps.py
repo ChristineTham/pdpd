@@ -14,6 +14,8 @@ class DPSPaths:
 
         # csvs
         self.anki_csvs_dps_dir = base_dir.joinpath(Path("dps/csvs/anki_csvs/"))
+        self.pali_class_dir = base_dir.joinpath(Path("dps/csvs/anki_csvs/pali_class/"))
+        self.pali_class_grammar_dir = base_dir.joinpath(Path("dps/csvs/anki_csvs/pali_class/grammar/"))
         self.csv_dps_dir = base_dir.joinpath(Path("dps/csvs/"))
         self.dpd_dps_full_path = base_dir.joinpath(Path("dps/csvs/dpd_dps_full.csv"))
         self.dps_full_path = base_dir.joinpath(Path("dps/csvs/dps_full.csv"))
@@ -30,9 +32,18 @@ class DPSPaths:
         self.id_to_add_path = base_dir.joinpath(Path("dps/csvs/id_to_add.csv"))
         self.id_temp_list_path = base_dir.joinpath(Path("dps/csvs/id_temp_list.csv"))
         self.csvs_for_audio_dir = base_dir.joinpath(Path("dps/csvs/csvs_for_audio/"))
+        self.ai_translated_dir = base_dir.joinpath(Path("dps/csvs/ai_translated"))
+        self.freqent_words_dir = base_dir.joinpath(Path("dps/csvs/freqent_words/"))
+        self.vinaya_tsv_path = base_dir.joinpath(Path("dps/sbs_csvs/vinaya.tsv"))
+        self.translation_example_path = base_dir.joinpath(Path("dps/csvs/tranlslation_examples.csv"))
+        self.sbs_archive = base_dir.joinpath(Path("dps/sbs_csvs/sbs_archive.tsv"))
+        self.sbs_example_corrections = base_dir.joinpath(Path("dps/csvs/sbs_example_corrections.tsv"))
 
+        self.ai_for_batch_api_dir = base_dir.joinpath(Path("dps/csvs/ai_for_batch_api/"))
+        self.ai_from_batch_api_dir = base_dir.joinpath(Path("dps/csvs/ai_from_batch_api/"))
 
         self.sbs_pd_path = base_dir.joinpath(Path("dps/csvs/sbs_pd.csv"))
+        self.ru_total_path = base_dir.joinpath(Path("dps/sbs_csvs/ru_total.tsv"))
 
 
         # /tests
@@ -53,7 +64,7 @@ class DPSPaths:
         self.freq_db_path = base_dir.joinpath(Path("dps/freq.db"))
 
         # txt
-        self.ru_user_dict_path = base_dir.joinpath(Path("dps/tools/ru_user_dictionary.txt"))
+        self.ru_user_dict_path = base_dir.joinpath(Path("dps/russian_words/russian_words.txt"))
         self.text_to_add_path = base_dir.joinpath(Path("temp/text.txt"))
         self.dpd_dps_concise_txt_path = base_dir.joinpath(Path("temp/dpd_dps_concise.txt"))
 
@@ -73,8 +84,10 @@ class DPSPaths:
 
     def create_dirs(self):
             for d in [
-                self.anki_csvs_dps_dir,
                 self.csv_dps_dir,
+                self.anki_csvs_dps_dir,
+                self.pali_class_dir,
+                self.pali_class_grammar_dir,
                 self.dps_backup_dir,
                 self.for_compare_dir,
                 self.temp_csv_backup_dir,

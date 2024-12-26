@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Modules for initilizing, reading, writing, updatingand testing
+"""Modules for initializing, reading, writing, updating and testing
 config.ini file."""
 
 import configparser
@@ -21,9 +21,7 @@ DEFAULT_CONFIG = {
         "db_rebuild": "no"
     },
     "deconstructor": {
-        "include_cloud": "no",
-        "all_texts": "no",
-        "run_on_cloud": "no"
+        "use_premade": "no",
     },
     "gui": {
         "theme": "DarkGrey10",
@@ -48,11 +46,13 @@ DEFAULT_CONFIG = {
     "dictionary": {
         "make_mdict": "yes",
         "link_url": "https://www.thebuddhaswords.net/",
-        "make_link": "no",
+        "make_link": "yes",
         "extended_synonyms": "no",
         "show_id": "no",
         "show_ebt_count": "no",
-        "show_dps_data": "no"
+        "show_sbs_data": "no",
+        "show_ru_data": "no",
+        "data_limit": "0",
     },
     "exporter" : {
         "language": "en",
@@ -60,9 +60,14 @@ DEFAULT_CONFIG = {
         "make_deconstructor": "no",
         "make_grammar": "no",
         "make_tpr": "no",
-        "make_ebook": "no"
+        "make_ebook": "no",
+        "make_tbw": "no",
+        "make_pdf": "no",
+        "tarball_db": "no",
+        "summary": "no",
+        "update_simsapa_db": "no"
     },
-    "openia": {
+    "openai": {
         "key": ""
     },
     "anki": {
@@ -71,6 +76,7 @@ DEFAULT_CONFIG = {
         "backup_path": ""
     },
     "simsapa": {
+        "app_path": "",
         "db_path": ""
     },
     "tpr": {
@@ -87,6 +93,7 @@ def config_initialize() -> None:
         for option, value in options.items():
             if not config.has_option(section, option):
                 config.set(section, option, value)
+    config_write()
 
 
 def config_read(section: str, option: str, default_value: Optional[str]=None) -> str|None:

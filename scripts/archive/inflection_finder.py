@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-"""Find a specific inflection in the derivated_data table."""
+"""Find a specific inflection in the derived_data table."""
 
 import re
 from rich import print
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 from tools.paths import ProjectPaths
 
 find_me = "āma$" 
@@ -14,7 +14,7 @@ find_me = "āma$"
 def main():
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
-    db = db_session.query(DpdHeadwords).all()
+    db = db_session.query(DpdHeadword).all()
     for counter, i in enumerate(db):
         if i.pos == "aor":
             if i.inflections:

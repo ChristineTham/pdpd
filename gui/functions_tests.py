@@ -13,9 +13,8 @@ from json import dumps, loads
 from typing import List, Tuple
 from rich import print
 
-from db.models import DpdHeadwords
-from tests.helpers import InternalTestRow
-from tools.pali_sort_key import pali_sort_key
+from db.models import DpdHeadword
+from db_tests.helpers import InternalTestRow
 
 # 1. individual internal tests
 
@@ -59,7 +58,7 @@ def write_internal_tests_list(pth, internal_tests_list):
 
 
 def test_the_tests(internal_tests_list, window):
-    column_names = [column.name for column in DpdHeadwords.__table__.columns]
+    column_names = [column.name for column in DpdHeadword.__table__.columns]
     column_names += [""]
     logical_operators = [
         "",
@@ -162,31 +161,37 @@ def run_individual_internal_tests(
 
         test_results = {}
 
-        for x, criterion in enumerate(search_criteria, start=1):
-            if not criterion[1]:
-                test_results[f"test{x}"] = True
-            elif criterion[1] == "equals":
-                test_results[f"test{x}"] = values[criterion[0]] == criterion[2]
-            elif criterion[1] == "does not equal":
-                test_results[f"test{x}"] = values[criterion[0]] != criterion[2]
-            elif criterion[1] == "contains":
-                test_results[f"test{x}"] = re.findall(
-                    criterion[2], values[criterion[0]]) != []
-            elif criterion[1] == "does not contain":
-                test_results[f"test{x}"] = re.findall(
-                    criterion[2], values[criterion[0]]) == []
-            elif criterion[1] == "contains word":
-                test_results[f"test{x}"] = re.findall(
-                    fr"\b{criterion[2]}\b", values[criterion[0]]) != []
-            elif criterion[1] == "does not contain word":
-                test_results[f"test{x}"] = re.findall(
-                    fr"\b{criterion[2]}\b", values[criterion[0]]) == []
-            elif criterion[1] == "is empty":
-                test_results[f"test{x}"] = values[criterion[0]] == ""
-            elif criterion[1] == "is not empty":
-                test_results[f"test{x}"] = values[criterion[0]] != ""
-            else:
-                print(f"[red]search_{x} error")
+        try:
+            for x, criterion in enumerate(search_criteria, start=1):
+                if not criterion[1]:
+                    test_results[f"test{x}"] = True
+                elif criterion[1] == "equals":
+                    test_results[f"test{x}"] = values[criterion[0]] == criterion[2]
+                elif criterion[1] == "does not equal":
+                    test_results[f"test{x}"] = values[criterion[0]] != criterion[2]
+                elif criterion[1] == "contains":
+                    test_results[f"test{x}"] = re.findall(
+                        criterion[2], values[criterion[0]]) != []
+                elif criterion[1] == "does not contain":
+                    test_results[f"test{x}"] = re.findall(
+                        criterion[2], values[criterion[0]]) == []
+                elif criterion[1] == "contains word":
+                    test_results[f"test{x}"] = re.findall(
+                        fr"\b{criterion[2]}\b", values[criterion[0]]) != []
+                elif criterion[1] == "does not contain word":
+                    test_results[f"test{x}"] = re.findall(
+                        fr"\b{criterion[2]}\b", values[criterion[0]]) == []
+                elif criterion[1] == "is empty":
+                    test_results[f"test{x}"] = values[criterion[0]] == ""
+                elif criterion[1] == "is not empty":
+                    test_results[f"test{x}"] = values[criterion[0]] != ""
+                else:
+                    print(f"[red]search_{x} error")
+        except Exception as e:
+            window["messages"].update(
+                f"{e}", text_color="red")
+            return flags
+
 
         test_message = f"{counter+2}. {t.test_name}"
 
@@ -197,6 +202,7 @@ def run_individual_internal_tests(
 
             window["messages"].update(
                 f"{test_message} - failed!", text_color="red")
+            window["update_db_button1"].update(button_color="red")
             
             def popup_window():
 
@@ -249,18 +255,20 @@ def run_individual_internal_tests(
         if next_flag is True:
             window["messages"].update(
                 "all tests passed!", text_color="white")
+            window["update_db_button1"].update(button_color="steel blue")
             flags.tested = True
             return flags
         else:
             window["messages"].update(
                 "test again", text_color="red")
+            window["update_db_button1"].update(button_color="red")
             return flags
 
 
 
 def db_internal_tests_setup(db_session, pth):
 
-    dpd_db = db_session.query(DpdHeadwords).all()
+    dpd_db = db_session.query(DpdHeadword).all()
     internal_tests_list = make_internal_tests_list(pth)
 
     return dpd_db, internal_tests_list
@@ -390,7 +398,12 @@ def db_internal_tests(db_session, pth, sg, window, flags):
                     break
 
                 if event == "test_add_exception_button":
-                    exception = values["test_add_exception"]
+                    try:
+                        exception = int(values["test_add_exception"])
+                    except ValueError:
+                        window["messages"].update(
+                            "[red]not a valid id")
+
                     internal_tests_list[test_counter].exceptions += [exception]
 
                     write_internal_tests_list(pth, internal_tests_list)

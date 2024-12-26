@@ -9,32 +9,32 @@ import subprocess
 import textwrap
 import pickle
 import configparser
-from typing import Optional, Tuple, List
+
+from typing import Optional, Tuple
 
 from spellchecker import SpellChecker
 from aksharamukha import transliterate
 from rich import print
-from nltk import word_tokenize
 
-from db.models import DpdHeadwords
-from functions_db import make_all_inflections_set
-from functions_db import values_to_pali_word
+from db.models import DpdHeadword
+from gui.functions_db import make_all_inflections_set
+from gui.functions_db import values_to_pali_word
+from gui.functions_db import make_words_to_add_list_generic
 
-from tools.addition_class import Addition
-from tools.bold_definitions_search import search_bold_defintions
+from tools.addition_class import Additions
+from tools.bold_definitions_search import search_bold_definitions
+from tools.configger import config_read
+from tools.configger import config_test
 from tools.configger import config_test_option
 from tools.configger import config_update
-from tools.configger import config_test
-from tools.configger import config_read
 from tools.cst_sc_text_sets import make_cst_text_list
 from tools.cst_sc_text_sets import make_sc_text_list
-from tools.pali_text_files import cst_texts
+from tools.cst_source_sutta_example import find_source_sutta_example
 from tools.pali_alphabet import pali_alphabet
+from tools.pali_text_files import cst_texts
+from tools.paths import ProjectPaths
 from tools.pos import INDECLINABLES
-from tools.source_sutta_example import find_source_sutta_example
-
-# nltk.download('punkt')
-
+from tools.tokenizer import split_words
 
 
 class Flags:
@@ -52,7 +52,7 @@ class Flags:
         self.construction_line2 = True
         self.suffix = True
         self.compound_construction = True
-        self.synoyms = True
+        self.synonyms = True
         self.commentary = True
         self.sanskrit = True
         self.example_1 = True
@@ -77,7 +77,7 @@ def reset_flags(flags):
     flags.construction_line2 = True
     flags.suffix = True
     flags.compound_construction = True
-    flags.synoyms = True
+    flags.synonyms = True
     flags.commentary = True
     flags.sanskrit = True
     flags.example_1 = True
@@ -103,13 +103,13 @@ def add_sandhi_correction(pth, window, values: dict) -> None:
     else:
 
         with open(
-                pth.manual_corrections_path, mode="a", newline="") as file:
+                pth.decon_manual_corrections, mode="a", newline="") as file:
             writer = csv.writer(file, delimiter="\t")
             writer.writerow([sandhi_to_correct, sandhi_correction])
         
         # also add to sandhi ok
         with open(
-                pth.sandhi_ok_path, mode="a", newline="") as file:
+                pth.decon_checked, mode="a", newline="") as file:
             writer = csv.writer(file, delimiter="\t")
             writer.writerow([sandhi_to_correct])
         
@@ -121,16 +121,17 @@ def add_sandhi_correction(pth, window, values: dict) -> None:
 
 def open_sandhi_corrections(pth):
     subprocess.Popen(
-        ["code", pth.manual_corrections_path])
+        ["code", pth.decon_manual_corrections])
 
 
 def add_sandhi_rule(pth, window, values: dict) -> None:
+    rule_no = values["rule_no"]
     chA = values["chA"]
     chB = values["chB"]
     ch1 = values["ch1"]
     ch2 = values["ch2"]
     example = values["example"]
-    usage = values["usage"]
+    weight = values["weight"]
 
     if (not chA or not chB or (not ch1 and not ch2)):
         window["messages"].update(
@@ -147,23 +148,24 @@ def add_sandhi_rule(pth, window, values: dict) -> None:
 
             for row in reader:
                 print(row)
-                if row[0] == chA and row[1] == chB and row[2] == ch1 and row[3] == ch2:
+                if row[1] == chA and row[2] == chB and row[3] == ch1 and row[4] == ch2:
                     window["messages"].update(
-                        f"{row[0]}-{row[1]} {row[2]}-{row[3]} {row[4]} {row[5]} already exists!", text_color="red")
+                        f"{row[0]}-{row[1]} {row[2]}-{row[3]} {row[4]} {row[5]} {row[6]} already exists!", text_color="red")
                     break
             else:
                 with open(
                         pth.sandhi_rules_path, mode="a", newline="") as file:
                     writer = csv.writer(file, delimiter="\t")
-                    writer.writerow([chA, chB, ch1, ch2, example, usage])
+                    writer.writerow([rule_no, chA, chB, ch1, ch2, example, weight])
                     window["messages"].update(
-                        f"{chA}-{chB} {ch1}-{ch2} {example} {usage} added to rules!", text_color="white")
+                        f"{rule_no}-{chA}-{chB} {ch1}-{ch2} {example} {weight} added to rules!", text_color="white")
+                    window["rule_no"].update("")
                     window["chA"].update("")
                     window["chB"].update("")
                     window["ch1"].update("")
                     window["ch2"].update("")
                     window["example"].update("")
-                    window["usage"].update("")
+                    window["weight"].update("")
 
 
 def open_sandhi_rules(pth):
@@ -222,12 +224,12 @@ def open_variant_readings(pth):
 
 def open_sandhi_ok(pth):
     subprocess.Popen(
-        ["code", pth.sandhi_ok_path])
+        ["code", pth.decon_checked])
 
 
 def open_sandhi_exceptions(pth):
     subprocess.Popen(
-        ["code", pth.sandhi_exceptions_path])
+        ["code", pth.decon_exceptions])
 
 
 def add_stem_pattern(values, window):
@@ -429,8 +431,14 @@ def check_spelling(pth, field, error_field, values, window, flags) -> Flags:
     spell = SpellChecker(language='en')
     spell.word_frequency.load_text_file(str(pth.user_dict_path))
 
-    sentence = values[field].replace("-", " ")
-    words = word_tokenize(sentence)
+    sentence = values[field] \
+        .replace("-", " ") \
+        .replace('"', "") \
+        .replace("“", "") \
+        .replace("”", "") \
+        .replace("'", "")
+    sentence = re.sub(r"\d", "", sentence) # remove all numbers
+    words = split_words(sentence)
 
     misspelled = spell.unknown(words)
 
@@ -441,13 +449,15 @@ def check_spelling(pth, field, error_field, values, window, flags) -> Flags:
     
     if misspelled:
         window[field].update(text_color="red")
+        window["update_db_button1"].update(button_color="red")
         flags.spelling_ok = False
-        return flags
+    
     else:
         window[field].update(text_color="darkgray")
+        window["update_db_button1"].update(button_color="steel blue")
         window[error_field].update("")
         flags.spelling_ok = True
-        return flags
+    return flags
 
 
 def add_spelling(pth, word):
@@ -469,7 +479,7 @@ def clear_errors(window):
 
 
 def clear_values(values, window, username):
-    from functions_db import dpd_values_list
+    from gui.functions_db import dpd_values_list
     if username == "primary_user":
         origin = "pass2"
     elif username == "deva":
@@ -487,7 +497,7 @@ def clear_values(values, window, username):
     window["search_for"].update("")
 
 
-def find_commentary_defintions(sg, values, db_session):
+def find_commentary_definitions(sg, values, db_session):
 
     config = load_gui_config()
 
@@ -498,7 +508,7 @@ def find_commentary_defintions(sg, values, db_session):
     window_width = int(screen_width * config["screen_fraction_width"])
     window_height = int(screen_height * config["screen_fraction_height"])
     
-    search_results = search_bold_defintions(
+    search_results = search_bold_definitions(
         db_session, values["search_for"], values["contains"])
 
     layout_elements = []
@@ -567,7 +577,7 @@ def find_commentary_defintions(sg, values, db_session):
     ]
 
     window = sg.Window(
-        "Find Commentary Defintions",
+        "Find Commentary Definitions",
         layout,
         resizable=True,
         size=(window_width, window_height),
@@ -620,7 +630,7 @@ def find_sutta_example(pth, sg, window, values: dict) -> Optional[Tuple[str, str
 
     book = values["book_to_add"]
     text_to_find = values["word_to_add"][0]
-    sutta_examples = find_source_sutta_example(pth, book, text_to_find)
+    sutta_examples = find_source_sutta_example(book, text_to_find)
 
     sentences_list = [sentence[2] for sentence in sutta_examples]
 
@@ -755,56 +765,14 @@ def test_book_to_add(values, window):
 
 
 def make_words_to_add_list(db_session, pth, __window__, book: str) -> list:
-    cst_text_list = make_cst_text_list(pth, [book])
-    sc_text_list = make_sc_text_list(pth, [book])
-    original_text_list = cst_text_list + sc_text_list
-
-    sp_mistakes_list = make_sp_mistakes_list(pth)
-    variant_list = make_variant_list(pth)
-    sandhi_ok_list = make_sandhi_ok_list(pth)
-    all_inflections_set = make_all_inflections_set(db_session)
-
-    text_set = set(cst_text_list) | set(sc_text_list)
-    text_set = text_set - set(sandhi_ok_list)
-    text_set = text_set - set(sp_mistakes_list)
-    text_set = text_set - set(variant_list)
-    text_set = text_set - all_inflections_set
-    text_list = sorted(text_set, key=lambda x: original_text_list.index(x))
-    print(f"words_to_add: {len(text_list)}")
-
-    with open(f"temp/{book}.tsv", "w") as f:
-        for i in text_list:
-            f.write(f"{i}\n")
-
-    return text_list
-
-
-def make_sp_mistakes_list(pth):
-
-    with open(pth.spelling_mistakes_path) as f:
-        reader = csv.reader(f, delimiter="\t")
-        sp_mistakes_list = [row[0] for row in reader]
-
-    print(f"sp_mistakes_list: {len(sp_mistakes_list)}")
-    return sp_mistakes_list
-
-
-def make_variant_list(pth):
-    with open(pth.variant_readings_path) as f:
-        reader = csv.reader(f, delimiter="\t")
-        variant_list = [row[0] for row in reader]
-
-    print(f"variant_list: {len(variant_list)}")
-    return variant_list
-
-
-def make_sandhi_ok_list(pth):
-    with open(pth.sandhi_ok_path) as f:
-        reader = csv.reader(f, delimiter="\t")
-        sandhi_ok_list = [row[0] for row in reader]
-
-    print(f"sandhi_ok_list: {len(sandhi_ok_list)}")
-    return sandhi_ok_list
+    return make_words_to_add_list_generic(
+        db_session=db_session,
+        pth=pth,
+        make_cst_func=make_cst_text_list,
+        make_sc_func=make_sc_text_list,
+        inflection_func=make_all_inflections_set,
+        book=book
+    )
 
 
 def open_inflection_tables(pth):
@@ -813,14 +781,14 @@ def open_inflection_tables(pth):
 
 
 def sandhi_ok(pth, window, word,):
-    with open(pth.sandhi_ok_path, "a", newline="") as csvfile:
+    with open(pth.decon_checked, "a", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow([word])
     window["messages"].update(f"{word} added", text_color="white")
 
 
 def display_summary(values, window, sg, pali_word_original2):
-    from functions_db import dpd_values_list
+    from gui.functions_db import dpd_values_list
 
     # Assuming pali_word_original2 is a dictionary with the original values
     if pali_word_original2:
@@ -1012,6 +980,8 @@ def replace_sandhi(
     
     text = "".join(splits)
 
+    # replace ṁ with ṃ
+    text = text.replace("ṁ", "ṃ")
     # fix bold 'ti
     text = text.replace("</b>ti", "</b>'ti")
     # fix bold 'ti
@@ -1061,14 +1031,23 @@ def test_username(sg):
 
 
 def compare_differences(
-        book_to_add, pth, values: dict, sg, pali_word_original: Optional[DpdHeadwords], action):
-    """Comapre the differences between original and new word.
+        book_to_add, pth, values: dict, sg, pali_word_original: Optional[DpdHeadword], action):
+    """Compare the differences between original and new word.
     Save to corrections or additions TSV."""
 
+    pali_word = values_to_pali_word(values)
+    new_addition = Additions(pali_word)
+
+    # two possibilities
+    # 1. its an update of an existing word which is not in the additions list
+    # 2. its an addition or an update of a word in the additions list
+
     if (
-        action == "updated" and
-        pali_word_original
+        action == "updated"
+        and pali_word_original
+        and not new_addition.needs_updating
     ):
+        
         # check what's changed
         got_comment = set()
         fields = pali_word_original.__dict__
@@ -1177,39 +1156,19 @@ def compare_differences(
                             writer.writerow(correction)
 
     elif (
-        action == "added" or
-        not pali_word_original
+        action == "added"
+        or not pali_word_original
+        or new_addition.needs_updating
     ):
         while True:
-            prompt = "Please comment on this new word."
+            prompt = "Please comment on this word."
             comment = sg.popup_get_text(
                 prompt, default_text=f'{book_to_add}', title="comment", location=(400, 400))
             if comment:
                 break
 
-        pali_word = values_to_pali_word(values)
-        if pth.additions_pickle_path.exists():
-            additions_list = Addition.load_additions()
-        else:
-            additions_list = []
-        addition = Addition(pali_word, comment)
+        new_addition.update(comment)  
 
-        additions_list.append(addition)
-        Addition.save_additions(additions_list)
-
-
-def additions_load(pth) -> List[Tuple]:
-    """Load the list of word to add to db from pickle file."""
-    with open(pth.additions_pickle_path, "rb") as file:
-        additions = pickle.load(file)
-        print(additions)
-        return additions
-
-
-def additions_save(pth, additions):
-    """Save the list of word to add to db to pickle file."""
-    with open(pth.additions_pickle_path, "wb") as file:
-        pickle.dump(additions, file)
 
 
 def load_gui_config(filename="config.ini"):
@@ -1355,10 +1314,39 @@ def make_compound_construction(values):
         return lemma_clean
 
 
-def make_has_values_list(values: dict) -> list[str]:
-    """Return a list of all the fields with values."""
-    has_value_list = []
-    for key, value in values.items():
-        if value:
-            has_value_list.append(key)
-    return has_value_list
+def example_save(
+        pth: ProjectPaths,
+        values: dict[str, str],
+        window,
+        example_no: str) -> None:
+    """Save source sutta examples as a pickle file."""
+    if example_no == "1":
+        source_sutta_example = (
+            values["source_1"],
+            values["sutta_1"],
+            values["example_1"].replace("<b>", "").replace("</b>", ""),)
+    elif example_no == "2":
+        source_sutta_example: tuple[str, str, str] = (
+            values["source_2"],
+            values["sutta_2"],
+            values["example_2"].replace("<b>", "").replace("</b>", ""),)
+    with open(pth.example_stash_path, "wb") as f:
+        pickle.dump(source_sutta_example, f)
+
+
+def example_load(pth: ProjectPaths, window, example_no: str) -> None:
+    """Load the example back into the window"""
+    try:
+        with open(pth.example_stash_path, "rb") as f:
+            source, sutta, example = pickle.load(f)
+        if example_no == "1":
+            window["source_1"].update(value=source)
+            window["sutta_1"].update(value=sutta)
+            window["example_1"].update(value=example)
+        elif example_no == "2":
+            window["source_2"].update(value=source)
+            window["sutta_2"].update(value=sutta)
+            window["example_2"].update(value=example)
+    except Exception:
+        window["messages"].update(
+            value="no sutta examples saved", text_color="red")

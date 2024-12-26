@@ -148,9 +148,6 @@ def setup(pth: ProjectPaths):
     global rules
     rules = import_sandhi_rules(pth)
 
-    global shortlist_set
-    shortlist_set = make_shortlist_set(pth)
-
     global unmatched_set
     with open(pth.unmatched_set_path, "rb") as f:
         unmatched_set = pickle.load(f)
@@ -214,20 +211,6 @@ def import_sandhi_rules(pth: ProjectPaths):
     return sandhi_rules
 
 
-def make_shortlist_set(pth: ProjectPaths):
-
-    print("[green]making shortlist set", end=" ")
-
-    shortlist_df = pd.read_csv(
-        pth.shortlist_path, dtype=str, header=None, sep="\t")
-    shortlist_df.fillna("", inplace=True)
-
-    shortlist_set = set(shortlist_df[0].tolist())
-    print(f"[white]{len(shortlist_set)}")
-
-    return shortlist_set
-
-
 def make_all_inflections_nfl_nll(all_inflections_set):
     """all inflections with no first letter, no last letter"""
 
@@ -249,6 +232,16 @@ def make_all_inflections_nfl_nll(all_inflections_set):
 
 def main():
     tic()
+    print("[bright_yellow]sandhi splitter")
+    if not (
+        config_test("exporter", "make_deconstructor", "yes") or 
+        config_test("exporter", "make_tpr", "yes") or 
+        config_test("exporter", "make_ebook", "yes") or 
+        config_test("regenerate", "db_rebuild", "yes")
+    ):
+        print("[green]disabled in config.ini")
+        toc()
+        return
 
     global profiler
     if profiler_on:
@@ -263,7 +256,7 @@ def main():
         format='%(asctime)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S')
 
-    # make globally accessable vaiables
+    # make globally accessible variables
     setup(pth)
 
     global matches_dict
@@ -315,7 +308,7 @@ def main():
             except KeyError:
                 pass
             matches_dict = {}
-            time_dict = {}
+            time_dict = {}     
 
     save_matches(pth, matches_dict)
 
@@ -459,7 +452,7 @@ def remove_neg(d: DotDict) -> DotDict:
             d.word = d.word[2:]
 
         elif d.word.startswith("na"):
-            if d.word[1] == d.word[2]:
+            if d.word[2] == d.word[3]:
                 d.word = d.word[3:]
             else:
                 d.word = d.word[2:]
@@ -1449,16 +1442,7 @@ def summary(pth: ProjectPaths):
 
 
 if __name__ == "__main__":
-    print("[bright_yellow]sandhi splitter")
-    if (
-        config_test("exporter", "make_deconstructor", "yes") or 
-        config_test("exporter", "make_tpr", "yes") or 
-        config_test("exporter", "make_ebook", "yes") or 
-        config_test("regenerate", "db_rebuild", "yes")
-    ):
-        main()
-    else:
-        print("generating is disabled in the config")
+    main()
 
 # Pathavīkasiṇasamāpattintiādi
 # dūteyyapahinagamanānuyogapabhedaṃ

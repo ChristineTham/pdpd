@@ -4,8 +4,8 @@
 
 from rich import print
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 from tools.tic_toc import tic, toc
 from tools.paths import ProjectPaths
 
@@ -15,12 +15,17 @@ from tools.configger import config_test
 
 def main():
     tic()
-
+    print("[bright_yellow]marking all which have sbs_category changing ebt_count")
+    
+    if not config_test("dictionary", "show_ebt_count", "yes"):
+        print("[green]disabled in config.ini")
+        toc()
+        return
 
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
 
-    dpd_db = db_session.query(DpdHeadwords).options(joinedload(DpdHeadwords.sbs)).all()
+    dpd_db = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs)).all()
 
     for word in dpd_db:
         if word.sbs:
@@ -33,15 +38,10 @@ def main():
 
 
     db_session.commit()
-
     db_session.close()
 
     toc()
 
 
 if __name__ == "__main__":
-    print("[bright_yellow] mark all which have sbs_category changing ebt_count")
-    if config_test("dictionary", "show_ebt_count", "yes"):
-        main()
-    else:
-        print("generating is disabled in the config")
+    main()

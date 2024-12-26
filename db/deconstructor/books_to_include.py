@@ -10,7 +10,7 @@ limited_texts = [
     "an9", "an10", "an11",
     "kn1", "kn2", "kn3", "kn4", "kn5",
     "kn8", "kn9", 
-    # "mna" # for testing
+    # "mna"
     ]
 
 
@@ -31,7 +31,24 @@ all_texts = [
     "mna",
     "sna",
     "ana",
-    "kna",
+    "kn1a",
+    "kn2a",
+    "kn3a",
+    "kn4a",
+    "kn5a",
+    "kn6a",
+    "kn7a",
+    "kn8a",
+    "kn9a",
+    "kn10a",
+    "kn11a",
+    "kn12a",
+    "kn13a",
+    "kn14a",
+    "kn15a",
+    "kn16a",
+    "kn17a",
+    "kn19a",
     "abha",
     "vint",
     "dnt",
@@ -41,5 +58,8 @@ all_texts = [
     "knt",
     "abht",
     "vism",
+    "visma",
+    "ap",
+    "apt",
     "anna",
     ]

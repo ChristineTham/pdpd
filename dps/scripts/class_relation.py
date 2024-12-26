@@ -3,29 +3,41 @@
 
 import re
 
-from db.models import DpdHeadwords, SBS
+from db.models import DpdHeadword, SBS
 from tools.paths import ProjectPaths
-from db.get_db_session import get_db_session
+from db.db_helpers import get_db_session
 from rich.console import Console
 from tools.tic_toc import tic, toc
 from typing import Optional
 
 from sqlalchemy.orm import joinedload
+from sqlalchemy import or_
 
 console = Console()
 
 
-def main():
+pth = ProjectPaths()
+db_session = get_db_session(pth.dpd_db_path)
+db = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs)).outerjoin(SBS).filter(
+        or_(
+            SBS.sbs_class_anki != "",
+            SBS.sbs_patimokkha != "",
+            SBS.sbs_index != "",
+            SBS.sbs_category != "",
+        )
+    ).all()
+
+
+def debug_print_sbs_class():
     tic()
     console.print("[bold bright_yellow]changing sbs_class accordingly")
 
-    pth = ProjectPaths()
-    db_session = get_db_session(pth.dpd_db_path)
+    console.print(f"[green]filtered db {len(db)}")
 
     count = 0
 
-    # Iterate over all DpdHeadwords instances and update their sbs_class
-    for word in db_session.query(DpdHeadwords).options(joinedload(DpdHeadwords.sbs)).all():
+    # Iterate over all DpdHeadword instances and update their sbs_class
+    for word in db:
 
 
             # debug check all sbs_class_anki which has not sbs.sbs_class
@@ -46,7 +58,7 @@ def main():
                 # debug check if have a new number but it is not the same as old
                 if (
                     word.sbs
-                    # and word.sbs.sbs_class_anki 
+                    and word.sbs.sbs_class_anki 
                     and word.sbs.sbs_class
                     and word.sbs.sbs_class != sbs_class
                 ):
@@ -90,6 +102,70 @@ def main():
 
     db_session.close()
     toc()
+
+
+def filling_sbs_class():
+    tic()
+    console.print("[bold bright_yellow]changing sbs_class accordingly")
+
+    console.print(f"[green]filtered db {len(db)}")
+
+    count_same = 0
+    count_added = 0
+    count_changed = 0
+    count_new = 0
+    count_delete = 0
+    count_empty = 0
+
+    # Iterate over all DpdHeadword instances and update their sbs_class
+    for word in db:
+
+            sbs_class: Optional[int]
+            sbs_class = determine_sbs_class(word)
+            if sbs_class is not None:
+
+                if word.sbs.sbs_class == int(sbs_class):
+                    count_same += 1
+
+                elif word.sbs and not word.sbs.sbs_class:
+                    word.sbs.sbs_class = int(sbs_class)
+                    count_added += 1
+                    # print(f"(added) for {word.lemma_1} new sbs_class: {sbs_class}")
+
+                elif word.sbs:
+                    word.sbs.sbs_class = int(sbs_class)
+                    count_changed += 1
+                    # print(f"(added) for {word.lemma_1} new sbs_class: {sbs_class}")
+
+                elif not word.sbs:
+                    word.sbs = SBS(id=word.id)
+                    word.sbs.sbs_class = int(sbs_class)
+                    count_new += 1
+                    # print(f"(added) for {word.lemma_1} new sbs_class: {sbs_class}")
+
+            else:
+                if word.sbs and word.sbs.sbs_class:
+                    word.sbs.sbs_class = ""
+                    count_delete += 1
+                    # print(f"(del) for {word.lemma_1} new sbs_class: {sbs_class}")
+
+                elif not word.sbs.sbs_class:
+                    count_empty += 1
+
+
+    console.print(f"[green]{count_same} rows same")
+    console.print(f"[green]{count_added} rows added")
+    console.print(f"[green]{count_changed} rows changed")
+    console.print(f"[green]{count_new} rows new")
+    console.print(f"[green]{count_delete} rows removed")
+    console.print(f"[green]{count_empty} rows have no sbs_class")
+
+
+    db_session.commit()
+
+    db_session.close()
+    toc()
+
 
 def determine_sbs_class(word) -> Optional[int]:
 
@@ -601,66 +677,151 @@ def determine_sbs_class(word) -> Optional[int]:
     #! IPC:
     # sandhi
     if (
-            word.pos == "sandhi"
-            and "ṃ +" not in word.construction
-        ):
-            # print(f"Pattern: vowel sandhi, Word: {word.lemma_1}")
-            return 16
+        word.pos == "sandhi"
+        and "ṃ +" not in word.construction
+        and "tad +" not in word.construction
+        and "yad +" not in word.construction
+        and "ṃ >" not in word.construction
+    ):
+        # print(f"Pattern: vowel sandhi, Word: {word.lemma_1}")
+        return 16
 
     elif (
-            word.pos == "sandhi"
-            and "ṃ +" in word.construction
-        ):
-            # print(f"Pattern: ṃ sandhi, Word: {word.lemma_1}")
-            return 17
+        word.pos == "sandhi" and
+        (
+            "ṃ +" in word.construction or 
+            "tad +" in word.construction or
+            "yad +" in word.construction or
+            "ṃ >" in word.construction
+        )
+    ):
+        # print(f"Pattern: ṃ sandhi, Word: {word.lemma_1}")
+        return 17
+
+    if (
+        (
+            ", comp" in word.grammar or 
+            "comp vb" in word.grammar) and
+        "compar" not in word.grammar and
+        word.compound_type == "" and
+        (
+            "ṃ +" in word.construction or 
+            "tad +" in word.construction or 
+            "yad +" in word.construction)
+    ):
+        # print(f"Pattern: ṃ sandhi, Word: {word.lemma_1}")
+        return 17
+
+    if (
+        (", comp" in word.grammar or "comp vb" in word.grammar) and
+        "compar" not in word.grammar and
+        word.compound_type == "" and
+        (
+            "√bhū" in word.phonetic
+            or "√kar" in word.phonetic
+        )
+    ):
+        # print(f"Pattern: √bhū and √kar a > i, Word: {word.lemma_1}")
+        return 19
+
+    vowel_sandhi_patterns = {
+    "aa > a", "aa > ā", "aa > o", "aā > ā", "āa > ā", "āā > ā", "ai > a", "ai > ā", "ai > i", 
+    "ai > e", "aī > e", "au > u", "au > ū", "au > o", "aū > o", "ae > e", "ao > o", "āi > ā", 
+    "āi > i", "āi > ī", "āi > e", "āu > ū", "āe > ā", "ia > a", "ia > ā", "ia > i", "ia > ī", 
+    "ia > ya", "iā > yā", "ii > i", "ii > ī", "iu > o", "ie > e", "io > o", "īa > yā", "īu > u", 
+    "īi > ī", "ua > u", "ua > va", "ua > vā", "uā > ā", "uā > vā", "ui > u", "ui > ū", "uu > u", 
+    "uu > ū", "ue > u", "ue > ve", "ūa > ū", "ea > a", "ea > ā", "ea > e", "ea > ya", "ea > yā", 
+    "eā > ā", "ei > e", "ee > e", "oa > a", "oa > ā", "oa > o", "oa > va", "oa > vā", "oe > e", 
+    "oe > o", "oi > o", "ou > u", "ya > yā", "va > vā", "+"
+    }
+
+
+    if (
+        (
+            ", comp" in word.grammar or 
+            "comp vb" in word.grammar or 
+            word.pos == "ind" or
+            word.pos == "idiom" 
+            ) and
+        "compar" not in word.grammar and
+        word.compound_type == "" and
+        any(pattern in word.phonetic for pattern in vowel_sandhi_patterns)
+    ):
+        # print(f"Pattern: vowel sandhi comp, Word: {word.lemma_1}")
+        return 16
+
+    cons_patterns = {
+        "tk > kk", "st > tth", "dv > dd", "rth > tth", "kh > kkh", "g > gg", "ch > cch", 
+        "j > jj", "ñ > ññ", "ṭh > ṭṭh", "t > tt", "d > dd", "dh > ddh", "n > nn", 
+        "p > pp", "b > bb", "l > ll", "s > ss", "āg > agg", "āp > app", "āb > abb", 
+        "m > mm", "rv > vv > bb", "pi > py > pp", "tk > kk", "bh > bbh", "tp > pp", 
+        "ṭh > ṭṭh"
+    }
+
+    if (
+        (
+            ", comp" in word.grammar or 
+            "comp vb" in word.grammar or 
+            word.pos == "ind" or
+            word.pos == "idiom"
+            ) and
+        "compar" not in word.grammar and
+        word.compound_type == "" and
+        any(pattern in word.phonetic for pattern in cons_patterns)
+    ):
+        # print(f"Pattern: cons sandhi comp, Word: {word.lemma_1}")
+        return 17
+
 
     # irreg nouns
     if (
-            "comp," not in word.grammar
-            and "mano group" in word.grammar
-        ):
-            # print(f"Pattern: mano group, Word: {word.lemma_1}")
-            return 18
+        "comp," not in word.grammar
+        and "mano group" in word.grammar
+    ):
+        # print(f"Pattern: mano group, Word: {word.lemma_1}")
+        return 18
 
     if (
-            word.pattern == "go masc"
-        ):
-            # print(f"Pattern: go masc, Word: {word.lemma_1}")
-            return 18
+        word.pattern == "go masc"
+    ):
+        # print(f"Pattern: go masc, Word: {word.lemma_1}")
+        return 18
 
     if (
-            "comp," not in word.grammar
-            and "atta group" in word.grammar
-        ):
-            # print(f"Pattern: atta group, Word: {word.lemma_1}")
-            return 18
+        "comp," not in word.grammar
+        and "atta group" in word.grammar
+        and "brahma" not in word.pattern
+    ):
+        # print(f"Pattern: atta group, Word: {word.lemma_1}")
+        return 18
 
     # comp
     if (
-            word.compound_type == "kammadhāraya"
-            or word.compound_type == "digu"
-            or (
-                "tappurisa" in word.compound_type 
-                and "bahubbīhi" not in word.compound_type 
-                and "abyayībhāva" not in word.compound_type
-                and "missaka" not in word.compound_type
-                )
-            or word.compound_type == "dvanda"
-        ):
-            # print(f"Pattern: comp 1st part, Word: {word.lemma_1}")
-            return 19
+        word.compound_type == "kammadhāraya"
+        or word.compound_type == "digu"
+        or (
+            "tappurisa" in word.compound_type 
+            and "bahubbīhi" not in word.compound_type 
+            and "abyayībhāva" not in word.compound_type
+            and "missaka" not in word.compound_type
+            )
+        or word.compound_type == "dvanda"
+    ):
+        # print(f"Pattern: comp 1st part, Word: {word.lemma_1}")
+        return 19
 
     elif (
-            "abyayībhāva" in word.compound_type
-            or "bahubbīhi" in word.compound_type
-            or "missaka" in word.compound_type
-        ):
-            # print(f"Pattern: comp 2nd part, Word: {word.lemma_1}")
-            return 20
+        "abyayībhāva" in word.compound_type
+        or "bahubbīhi" in word.compound_type
+        or "missaka" in word.compound_type
+    ):
+        # print(f"Pattern: comp 2nd part, Word: {word.lemma_1}")
+        return 20
 
     # Return None if none of the conditions are met
     return None
 
 
-if __name__ == "__main__":
-    main()
+
+# debug_print_sbs_class()
+filling_sbs_class()

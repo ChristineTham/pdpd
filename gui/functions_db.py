@@ -1,17 +1,19 @@
 """Database functions related to the GUI."""
 
 import re
+import csv
 
 from rich import print
 from sqlalchemy import or_
 from typing import Optional, Tuple
 
-from db.models import SBS, DpdHeadwords, DpdRoots, InflectionTemplates, Russian
-from functions_daily_record import daily_record_update
+from db.models import SBS, DpdHeadword, DpdRoot, InflectionTemplates, Russian
+from gui.functions_daily_record import daily_record_update
 
-from tools.i2html import make_html
 from tools.pali_sort_key import pali_sort_key
 from tools.paths import ProjectPaths
+from tools.tsv_read_write import append_tsv_list
+from tools.fast_api_utils import request_dpd_server
 
 
 dpd_values_list = [
@@ -23,7 +25,7 @@ dpd_values_list = [
     "compound_construction", "non_root_in_comps", "source_1", "sutta_1",
     "example_1", "source_2", "sutta_2", "example_2", "antonym", "synonym",
     "variant", "commentary", "notes", "cognate", "link", "origin", "stem",
-    "pattern", "created_at", "updated_at"]
+    "pattern", "created_at", "updated_at", "online_suggestion"]
 
 
 class Word:
@@ -83,36 +85,22 @@ class Word:
 
 
 def print_pos_list(db_session):
-    pos_db = db_session.query(
-        DpdHeadwords.pos
-    ).group_by(
-        DpdHeadwords.pos
-    ).all()
+    pos_db = db_session.query(DpdHeadword.pos).group_by(DpdHeadword.pos).all()
     pos_list = sorted([i.pos for i in pos_db])
     print(pos_list, end=" ")
 
 
 def get_next_ids(db_session, window):
 
-    used_ids = db_session.query(DpdHeadwords.id).order_by(DpdHeadwords.id).all()
-
-    def find_missing_or_next_id():
-        counter = 1
-        for used_id in used_ids:
-            if counter != int(used_id.id):
-                return counter
-            else:
-                counter += 1
-        return counter
-
-    next_id = find_missing_or_next_id()
-    print(next_id)
+    db = db_session.query(DpdHeadword.id).order_by(DpdHeadword.id).all()
+    max_id = max(used_id.id for used_id in db)
+    next_id = max_id + 1
 
     window["id"].update(next_id)
 
 
 def values_to_pali_word(values):
-    word_to_add = DpdHeadwords()
+    word_to_add = DpdHeadword()
     for attr in word_to_add.__table__.columns.keys():
         if attr in values:
             setattr(word_to_add, attr, values[attr])
@@ -120,7 +108,7 @@ def values_to_pali_word(values):
     return word_to_add
 
 
-def udpate_word_in_db(
+def update_word_in_db(
         pth: ProjectPaths,
         db_session,
         window,
@@ -129,8 +117,8 @@ def udpate_word_in_db(
     
     word_to_add = values_to_pali_word(values)
     word_id = values["id"]
-    pali_word_in_db = db_session.query(DpdHeadwords).filter(
-        values["id"] == DpdHeadwords.id).first()
+    pali_word_in_db = db_session.query(DpdHeadword).filter(
+        values["id"] == DpdHeadword.id).first()
 
     # add if word not in db
     if not pali_word_in_db:
@@ -141,7 +129,7 @@ def udpate_word_in_db(
                 f"'{values['lemma_1']}' added to db",
                 text_color="white")
             daily_record_update(window, pth, "add", word_id)
-            make_html(pth, [values["lemma_1"]])
+            request_dpd_server(values["id"])
             return True, "added"
 
         except Exception as e:
@@ -161,7 +149,7 @@ def udpate_word_in_db(
                 f"'{values['lemma_1']}' updated in db",
                 text_color="white")
             daily_record_update(window, pth, "edit", word_id)
-            make_html(pth, [values["lemma_1"]])
+            request_dpd_server(values["id"])
             return True, "updated"
 
         except Exception as e:
@@ -223,11 +211,7 @@ def copy_word_from_db(db_session, values, window):
 
 
 def get_verb_values(db_session):
-    results = db_session.query(
-        DpdHeadwords.verb
-    ).group_by(
-        DpdHeadwords.verb
-    ).all()
+    results = db_session.query(DpdHeadword.verb).group_by(DpdHeadword.verb).all()
     verb_values = sorted([v[0] for v in results])
     return verb_values
 
@@ -235,11 +219,7 @@ def get_verb_values(db_session):
 
 
 def get_case_values(db_session):
-    results = db_session.query(
-        DpdHeadwords.plus_case
-    ).group_by(
-        DpdHeadwords.plus_case
-    ).all()
+    results = db_session.query(DpdHeadword.plus_case).group_by(DpdHeadword.plus_case).all()
     case_values = sorted([v[0] for v in results])
     return case_values
 
@@ -247,11 +227,7 @@ def get_case_values(db_session):
 # get_case_values()
 
 def get_root_key_values(db_session):
-    results = db_session.query(
-        DpdHeadwords.root_key
-    ).group_by(
-        DpdHeadwords.root_key
-    ).all()
+    results = db_session.query(DpdHeadword.root_key).group_by(DpdHeadword.root_key).all()
     root_key_values = sorted([v[0] for v in results if v[0] is not None])
     return root_key_values
 
@@ -259,11 +235,7 @@ def get_root_key_values(db_session):
 # get_root_key_values()
 
 def get_family_root_values(db_session, root_key):
-    results = db_session.query(
-        DpdRoots
-    ).filter(
-        DpdRoots.root == root_key
-    ).first()
+    results = db_session.query(DpdRoot).filter(DpdRoot.root == root_key).first()
     if results is not None:
         family_root_values = results.root_family_list
         return family_root_values
@@ -274,13 +246,10 @@ def get_family_root_values(db_session, root_key):
 # get_family_root_values("√kar")
 
 def get_root_sign_values(db_session, root_key):
-    results = db_session.query(
-        DpdHeadwords.root_sign
-    ).filter(
-        DpdHeadwords.root_key == root_key
-    ).group_by(
-        DpdHeadwords.root_sign
-    ).all()
+    results = db_session.query(DpdHeadword.root_sign) \
+        .filter(DpdHeadword.root_key == root_key) \
+        .group_by(DpdHeadword.root_sign) \
+        .all()
     root_sign_values = sorted([v[0] for v in results])
     return root_sign_values
 
@@ -288,13 +257,10 @@ def get_root_sign_values(db_session, root_key):
 # get_root_sign_values("√kar")
 
 def get_root_base_values(db_session, root_key):
-    results = db_session.query(
-        DpdHeadwords.root_base
-    ).filter(
-        DpdHeadwords.root_key == root_key
-    ).group_by(
-        DpdHeadwords.root_base
-    ).all()
+    results = db_session.query(DpdHeadword.root_base) \
+        .filter(DpdHeadword.root_key == root_key) \
+        .group_by(DpdHeadword.root_base) \
+        .all()
     root_base_values = sorted([v[0] for v in results])
     return root_base_values
 
@@ -303,11 +269,9 @@ def get_root_base_values(db_session, root_key):
 
 
 def get_family_word_values(db_session):
-    results = db_session.query(
-        DpdHeadwords.family_word
-    ).group_by(
-        DpdHeadwords.family_word
-    ).all()
+    results = db_session.query(DpdHeadword.family_word) \
+        .group_by(DpdHeadword.family_word) \
+        .all()
     family_word_values = sorted([v[0] for v in results if v[0] is not None])
     return family_word_values
 
@@ -316,7 +280,7 @@ def get_family_word_values(db_session):
 
 
 def get_family_compound_values(db_session):
-    results = db_session.query(DpdHeadwords).all()
+    results = db_session.query(DpdHeadword).all()
     family_compound_values = []
     for i in results:
         family_compound_values.extend(i.family_compound_list)
@@ -327,10 +291,10 @@ def get_family_compound_values(db_session):
 
 
 def get_family_idioms_values(db_session):
-    results = db_session.query(DpdHeadwords).all()
+    results = db_session.query(DpdHeadword).all()
     family_idioms_values = []
     for i in results:
-        i: DpdHeadwords
+        i: DpdHeadword
         family_idioms_values.extend(i.family_idioms_list)
 
     family_idioms_values = sorted(
@@ -342,11 +306,9 @@ def get_family_idioms_values(db_session):
 
 
 def get_derivative_values(db_session):
-    results = db_session.query(
-        DpdHeadwords.derivative
-    ).group_by(
-        DpdHeadwords.derivative
-    ).all()
+    results = db_session.query(DpdHeadword.derivative) \
+        .group_by(DpdHeadword.derivative) \
+        .all()
     derivative_values = sorted([v[0] for v in results])
     return derivative_values
 
@@ -355,11 +317,9 @@ def get_derivative_values(db_session):
 
 
 def get_compound_type_values(db_session):
-    results = db_session.query(
-        DpdHeadwords.compound_type
-    ).group_by(
-        DpdHeadwords.compound_type
-    ).all()
+    results = db_session.query(DpdHeadword.compound_type) \
+        .group_by(DpdHeadword.compound_type) \
+        .all()
     compound_type_values = sorted([v[0] for v in results])
     return compound_type_values
 
@@ -377,12 +337,10 @@ def get_synonyms(
     lemma_1_clean = re.sub(r" \d.*$", "", lemma_1)
 
     # search for similar meanings
-    results = db_session.query(
-        DpdHeadwords
-        ).filter(
-            DpdHeadwords.pos == pos,
-            or_(*[DpdHeadwords.meaning_1.like(
-                f"%{meaning}%") for meaning in list_of_meanings])
+    results = db_session.query(DpdHeadword) \
+        .filter(
+            DpdHeadword.pos == pos,
+            or_(*[DpdHeadword.meaning_1.like(f"%{meaning}%") for meaning in list_of_meanings])
         ).all()
 
     # make a dictioanary of all meanings
@@ -424,8 +382,8 @@ def get_sanskrit(db_session, construction: str) -> str:
     sanskrit = ""
     already_added = []
     for constr_split in constr_splits:
-        results = db_session.query(DpdHeadwords)\
-            .filter(DpdHeadwords.lemma_1.like(f"%{constr_split}%"))\
+        results = db_session.query(DpdHeadword)\
+            .filter(DpdHeadword.lemma_1.like(f"%{constr_split}%"))\
             .all()
         for i in results:
             if i.lemma_clean == constr_split:
@@ -447,9 +405,7 @@ def get_sanskrit(db_session, construction: str) -> str:
 # print(get_sanskrit("sāvaka + saṅgha + ika"))
 
 def get_patterns(db_session):
-    results = db_session.query(
-        InflectionTemplates.pattern
-    ).all()
+    results = db_session.query(InflectionTemplates.pattern).all()
     inflection_patterns = sorted([v[0] for v in results])
     return inflection_patterns
 
@@ -457,9 +413,7 @@ def get_patterns(db_session):
 
 
 def get_family_set_values(db_session):
-    results = db_session.query(
-        DpdHeadwords.family_set
-    ).all()
+    results = db_session.query(DpdHeadword.family_set).all()
 
     family_sets = []
     for r in results:
@@ -474,7 +428,7 @@ def get_family_set_values(db_session):
 
 def make_all_inflections_set(db_session):
 
-    inflections_db = db_session.query(DpdHeadwords).all()
+    inflections_db = db_session.query(DpdHeadword).all()
 
     all_inflections_set = set()
     for i in inflections_db:
@@ -485,23 +439,47 @@ def make_all_inflections_set(db_session):
 
 
 def get_lemma_clean_list(db_session):
-    results = db_session.query(DpdHeadwords).all()
+    results = db_session.query(DpdHeadword).all()
     return [i.lemma_clean for i in results]
 
 
 def delete_word(pth, db_session, values, window):
     try:
         word_id = values["id"]
-        db_session.query(DpdHeadwords).filter(word_id == DpdHeadwords.id).delete()
+        word_lemma = values["lemma_1"]
+
+        db_session.query(DpdHeadword).filter(word_id == DpdHeadword.id).delete()
         db_session.commit()
         
-        # also delete from Russian and SBS tables
+        # also delete from Russian table
         try:
-            db_session.query(Russian).filter(word_id == Russian.id).delete()
+            ru_record = db_session.query(Russian).filter(word_id == Russian.id).first()
+            if ru_record:
+                # Save all ru to TSV
+                ru_header = ["word_id", "word_lemma"]
+                ru_data = [[ru_record.id, word_lemma]]
+                append_tsv_list(pth.delated_words_history_pth, ru_header, ru_data)
+                # Delete the Russian record
+                db_session.query(Russian).filter(word_id == Russian.id).delete()
         except Exception:
             print("[red]no Russian word found")
+
+        # also delete from SBS table
         try:
-            db_session.query(SBS).filter(word_id == SBS.id).delete()
+            sbs_record = db_session.query(SBS).filter(word_id == SBS.id).first()
+            if sbs_record:
+                # Check if any sbs_example_* fields are not empty
+                sbs_examples = [sbs_record.sbs_example_1, sbs_record.sbs_example_2, sbs_record.sbs_example_3, sbs_record.sbs_example_4]
+                non_empty_examples = [example for example in sbs_examples if example]
+                
+                if non_empty_examples:
+                    # Save all non-empty sbs_example_* and id to TSV
+                    sbs_header = ["word_id", "word_lemma"] + [f"sbs_example_{i+1}" for i in range(len(non_empty_examples))]
+                    show_sbs_data = [[sbs_record.id, word_lemma] + non_empty_examples]
+                    append_tsv_list(pth.delated_words_history_pth, sbs_header, show_sbs_data)
+                    
+                    # Delete the SBS record
+                    db_session.query(SBS).filter(word_id == SBS.id).delete()
         except Exception:
             print("[red]no SBS word found")
 
@@ -514,17 +492,16 @@ def delete_word(pth, db_session, values, window):
 
 
 def get_root_info(db_session, root_key):
-    r = db_session.query(
-        DpdRoots).filter(
-            DpdRoots.root == root_key
-        ).first()
+    r = db_session.query(DpdRoot) \
+        .filter(DpdRoot.root == root_key) \
+        .first()
 
     if r:
         root_info = f"{r.root_clean} {r.root_group} "
         root_info += f"{r.root_sign} ({r.root_meaning})"
         return root_info
     else:
-        print("No matching DpdRoots found for given root_key.")
+        print("No matching DpdRoot found for given root_key.")
         return None
 
 
@@ -538,7 +515,7 @@ def remove_line_breaker(word):
         return word
 
 
-def fetch_id_or_lemma_1(db_session, values: dict, field: str) -> Optional[DpdHeadwords]:
+def fetch_id_or_lemma_1(db_session, values: dict, field: str) -> Optional[DpdHeadword]:
     """Get id or pali1 from db."""
     id_or_lemma_1 = values[field]
 
@@ -549,13 +526,13 @@ def fetch_id_or_lemma_1(db_session, values: dict, field: str) -> Optional[DpdHea
         
     first_character = id_or_lemma_1[0]
     if first_character.isalpha():
-        query = db_session.query(DpdHeadwords).filter(
-            DpdHeadwords.lemma_1 == id_or_lemma_1).first()
+        query = db_session.query(DpdHeadword).filter(
+            DpdHeadword.lemma_1 == id_or_lemma_1).first()
         if query:
             return query
     elif first_character.isdigit():
-        query = db_session.query(DpdHeadwords).filter(
-            DpdHeadwords.id == id_or_lemma_1).first()
+        query = db_session.query(DpdHeadword).filter(
+            DpdHeadword.id == id_or_lemma_1).first()
         if query:
             return query
 
@@ -563,7 +540,7 @@ def fetch_id_or_lemma_1(db_session, values: dict, field: str) -> Optional[DpdHea
 def del_syns_if_pos_meaning_changed(
         db_session,
         values: dict,
-        pali_word_original2: Optional[DpdHeadwords]
+        pali_word_original2: Optional[DpdHeadword]
 ):
         """Delete all occurences of the headword 
         in the synonms column of the db if
@@ -579,8 +556,8 @@ def del_syns_if_pos_meaning_changed(
                 search_term = f"(, |^){lemma_clean}(, |$)"
 
                 results = db_session \
-                    .query(DpdHeadwords) \
-                    .filter(DpdHeadwords.synonym.regexp_match(search_term)) \
+                    .query(DpdHeadword) \
+                    .filter(DpdHeadword.synonym.regexp_match(search_term)) \
                     .all()
 
                 for r in results:
@@ -589,3 +566,117 @@ def del_syns_if_pos_meaning_changed(
 
                 db_session.commit()
                 print("[green]db_session committed ")
+
+
+def make_words_to_add_list_generic(
+    db_session,
+    pth,
+    make_cst_func,
+    make_sc_func=None,
+    inflection_func=make_all_inflections_set,
+    book=None,
+    sutta_name=None,
+    dpspth=None,
+    source=None,
+    field=None,
+    output_filename_template="temp/{prefix}{identifier}.tsv",
+) -> list:
+    """
+    Generalized function to create words to add lists with various configurations.
+
+    Parameters:
+    - db_session: The database session for retrieving inflections.
+    - pth: Path for resources.
+    - make_cst_func: Function to create the CST text list.
+    - make_sc_func: Optional function to create the SC text list.
+    - inflection_func: Function to generate the inflection set.
+    - book: The book name (optional).
+    - sutta_name: The sutta name (optional).
+    - dpspth: Path for DPS files (optional).
+    - source: Source identifier (optional).
+    - field: Field name for inflections (optional).
+    - output_filename_template: Template for the output file name.
+
+    Returns:
+    - A sorted list of words to add.
+    """
+    # Generate CST and SC text lists
+    if dpspth:
+        cst_text_list = make_cst_func(dpspth)
+    elif sutta_name:
+        cst_text_list = make_cst_func(pth, sutta_name, [book])
+    else:
+        cst_text_list = make_cst_func(pth, [book])
+
+    sc_text_list = make_sc_func(pth, [book]) if make_sc_func else []
+    original_text_list = list(cst_text_list) + list(sc_text_list)
+
+    # Generate additional lists
+    sp_mistakes_list = make_sp_mistakes_list(pth)
+    variant_list = make_variant_list(pth)
+    sandhi_ok_list = make_sandhi_ok_list(pth)
+
+    # Conditionally pass arguments to the inflection function
+    if "filtered" in inflection_func.__name__:
+        all_inflections_set = inflection_func(db_session, source=source)
+    elif "field" in inflection_func.__name__:
+        all_inflections_set = inflection_func(db_session, field=field)
+    else:
+        all_inflections_set = inflection_func(db_session)
+
+    # Filter the text set
+    text_set = set(cst_text_list) | set(sc_text_list)
+    text_set -= set(sandhi_ok_list)
+    text_set -= set(sp_mistakes_list)
+    text_set -= set(variant_list)
+    text_set -= all_inflections_set
+
+    # Sort based on original order
+    text_list = sorted(text_set, key=lambda x: original_text_list.index(x))
+
+    print(f"words_to_add: {len(text_list)}")
+
+    # Determine filename
+    prefix = "dps_" if "dps" in inflection_func.__name__ else ""
+    identifier = (
+        f"{source}_{book}" if source else 
+        f"{sutta_name}_{book}" if sutta_name else 
+        f"text_{field}" if field else 
+        book or "text"
+    )
+    output_filename = output_filename_template.format(prefix=prefix, identifier=identifier)
+
+    # Save to a file
+    with open(output_filename, "w") as f:
+        for word in text_list:
+            f.write(f"{word}\n")
+
+    return text_list
+
+
+def make_sp_mistakes_list(pth):
+
+    with open(pth.spelling_mistakes_path) as f:
+        reader = csv.reader(f, delimiter="\t")
+        sp_mistakes_list = [row[0] for row in reader]
+
+    print(f"sp_mistakes_list: {len(sp_mistakes_list)}")
+    return sp_mistakes_list
+
+
+def make_variant_list(pth):
+    with open(pth.variant_readings_path) as f:
+        reader = csv.reader(f, delimiter="\t")
+        variant_list = [row[0] for row in reader]
+
+    print(f"variant_list: {len(variant_list)}")
+    return variant_list
+
+
+def make_sandhi_ok_list(pth):
+    with open(pth.decon_checked) as f:
+        reader = csv.reader(f, delimiter="\t")
+        sandhi_ok_list = [row[0] for row in reader]
+
+    print(f"sandhi_ok_list: {len(sandhi_ok_list)}")
+    return sandhi_ok_list

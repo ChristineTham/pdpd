@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-"""Transliterate all inflections into Sinhala, Devanagari and Thai.
+"""
+Transliterate all inflections into Sinhala, Devanagari and Thai.
 - Regenerate from scratch OR
 - Update if stem & pattern has changed or inflection template has changed.
 Save into database.
@@ -12,7 +13,6 @@ import json
 import pickle
 
 from aksharamukha import transliterate
-from rich import print
 from subprocess import check_output
 from typing import Dict, List, TypedDict
 
@@ -20,17 +20,19 @@ import psutil
 from multiprocessing.managers import ListProxy
 from multiprocessing import Process, Manager
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 
 from tools.configger import config_test
+from tools.printer import p_green, p_no, p_title, p_yes
+from tools.sinhala_tools import translit_ro_to_si
 from tools.tic_toc import tic, toc
 from tools.paths import ProjectPaths
 from tools.utils import list_into_batches
 
 
 def _parse_batch(
-    batch: List[DpdHeadwords],
+    batch: List[DpdHeadword],
     pth: ProjectPaths,
     changed_headwords: list,
     changed_templates: list,
@@ -56,7 +58,7 @@ def _parse_batch(
         test2 = i.lemma_1 in changed_headwords
 
         if test1 or test2 or regenerate_all:
-            inflections: list = i.inflections_list
+            inflections: list = i.inflections_list_all # include api ca eva iti
             inflections_index_dict[counter] = i.lemma_1
             inflections_for_json_dict[i.lemma_1] = {"inflections": inflections}
 
@@ -85,12 +87,7 @@ def _parse_batch(
 
     # print("[green]transliterating sinhala with aksharamukha")
 
-    sinhala: str = transliterate.process(
-        "IASTPali",
-        "Sinhala",
-        inflections_to_transliterate_string,
-        post_options=["SinhalaPali"],
-    )  # type:ignore
+    sinhala: str = translit_ro_to_si(inflections_to_transliterate_string)
 
     # print("[green]transliterating devanagari with aksharamukha")
 
@@ -155,7 +152,7 @@ def _parse_batch(
         )
         # print(f"[green]{output}")
     except Exception as e:
-        print(f"[bright_red]{e}")
+        p_no(e)
 
     # re-import path nirvana transliterations
 
@@ -196,7 +193,7 @@ def main():
 
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
-    dpd_db = db_session.query(DpdHeadwords).all()
+    dpd_db = db_session.query(DpdHeadword).all()
 
     with open(pth.changed_headwords_path, "rb") as f:
         changed_headwords: list = pickle.load(f)
@@ -205,7 +202,9 @@ def main():
         changed_templates: list = pickle.load(f)
 
     tic()
-    print("[bright_yellow]transliterating inflections")
+    p_title("transliterating inflections")
+    
+    p_green("regenerate all")
 
     # check config
     if config_test("regenerate", "transliterations", "yes") or config_test(
@@ -214,11 +213,12 @@ def main():
         regenerate_all: bool = True
     else:
         regenerate_all: bool = False
+    p_yes(str(regenerate_all))
 
-    print(f"[green]{'regenerate all':<20}[white]{regenerate_all:>10}")
+    p_green("transliterating")
 
     num_logical_cores = psutil.cpu_count()
-    batches: List[List[DpdHeadwords]] = list_into_batches(dpd_db, num_logical_cores)
+    batches: List[List[DpdHeadword]] = list_into_batches(dpd_db, num_logical_cores)
 
     processes: List[Process] = []
     manager = Manager()
@@ -251,10 +251,10 @@ def main():
     for i in results_translit_dict:
         for k, v in i.items():
             translit_dict[k] = v
+    p_yes(len(translit_dict))
 
     # write back into database
-    print(f"[green]{'writing to db':<20}", end="")
-
+    p_green("writing to db")
 
     translit_counter = 0
     for i in dpd_db:
@@ -266,10 +266,9 @@ def main():
             i.inflections_thai = ",".join(list(translit_dict[i.lemma_1]["thai"]))
             translit_counter += 1
 
-    print(f"{translit_counter:>10,}")
-
     db_session.commit()
     db_session.close()
+    p_yes(translit_counter)
 
     toc()
 

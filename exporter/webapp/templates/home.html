@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Pāḷi Dictionary</title>
+    <link rel="stylesheet" type="" href="/static/home.css">
+    <link rel="stylesheet" type="" href="/static/switch.css">
+    <link rel="stylesheet" type="" href="/static/dpd.css">
+    <link rel="icon" type="image/png" href="/static/dpd.ico">
+</head>
+
+
+<body>
+    <div class="header-pane">
+        <div class="logo-title">
+            <img src="static/dpd.ico" alt="dpd logo" id="header-image" class="header-image">
+            <h2 class="title" id="title-clear">Digital Pāḷi Dictionary</h2>
+        </div>
+        <form id="search-form">
+            <input 
+                class="search-box" type="text" name="search" id="search-box" value="{{ search }}" 
+                autocomplete="off" inputmode="text" autocapitalize="off">
+            <button class="search-button" id="search-button">search</button>
+            <button class="help small-button" id="search-help-button">
+                ?
+                <span class="tooltip velthuis">
+                    <b>
+                        Velthuis typing:
+                    </b><br><br>
+                    aa > ā<br>
+                    ii > ī<br>
+                    uu > ū<br>
+                    "n > ṅ<br>
+                    ~n > ñ<br>
+                    .t > ṭ<br>
+                    .d > ḍ<br>
+                    .n > ṇ<br>
+                    .m > ṃ<br>
+                    .l > ḷ
+                </span>
+            </button>
+            <!-- Language selection dropdown -->
+            <div class="language-switcher">
+                <span class="language-icon" title="Language">🌐
+                    <span class="tooltip">
+                        <b>Select Language</b>
+                    </span>
+                </span>
+                <div class="dropdown" style="display: none;">
+                    <a href="#" class="dropdown-item" onclick="changeLanguage('en')">English</a>
+                    <a href="#" class="dropdown-item" onclick="changeLanguage('ru')">Русский</a>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="main-pane" id="main-pane">
+        <div class="history-pane" id="history-pane"">
+            <h3>History</h3>          
+            <button id="clear-history-button" class="clear-history-button">x</button>  
+            <div class="history-list-pane" id="history-list-pane">
+            </div>
+            
+        </div>
+        <div class=dpd-pane id="dpd-pane">
+            <div class="summary-results" id="summary-results"></div>
+            <div class="dpd-results" id="dpd-results">
+                {{ dpd_results|safe }}
+            </div>    
+        </div>
+        <div class=settings-pane>
+            <h3>Settings</h3>
+            <p>
+                <button class="small-button" id="font-size-down">-</button>
+                <button class="small-button" id="font-size-up">+</button>
+                font size 
+                <span id="font-size-display"></span>
+            </p>
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="theme-toggle"><span class="slider round"></span>
+                </label>
+                light / dark mode
+            </p>
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="sans-serif-toggle"><span class="slider round"></span>
+                </label>
+                sans / serif font
+            </p>
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="niggahita-toggle"><span class="slider round"></span>
+                </label>
+                niggahīta ṃ / ṁ 
+            </p>
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="grammar-toggle"><span class="slider round"></span>
+                </label>
+                grammar button closed / open
+            </p>
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="example-toggle"><span class="slider round"></span>
+                </label>
+                example button closed / open
+            </p>
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="one-button-toggle"><span class="slider round"></span>
+                </label>
+                one button at a time off / on
+            </p>
+            <!-- <p>
+                <label class="switch">
+                    <input type="checkbox" id="sbs-example-toggle"><span class="slider round"></span>
+                </label>
+                sbs example button closed / open
+            </p> -->
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="summary-toggle" checked><span class="slider round"></span>
+                </label>
+                summary hide / show
+            </p>
+            <p>
+                <label class="switch">
+                    <input type="checkbox" id="sandhi-toggle" checked><span class="slider round"></span>
+                </label>
+                sandhi ' hide / show
+            </p>
+        </div>
+    </div>
+    <div class="footer-pane">
+        For more information, please read the &nbsp;
+        <a href="https://digitalpalidictionary.github.io/dpdict.html" target="_blank">DPD help website</a>
+    </div>
+    <script src="static/home.js"></script>
+    <script src="static/dpd.js"></script>
+</body>
+
+</html>

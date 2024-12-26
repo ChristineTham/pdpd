@@ -13,16 +13,16 @@ from json import dumps, loads
 from typing import List, Tuple
 from rich import print
 
-from db.models import DpdHeadwords
-from tests.helpers import InternalTestRow
-# from tools.pali_sort_key import pali_sort_key
+from db.models import DpdHeadword
+from db_tests.helpers import InternalTestRow
+
 from sqlalchemy.orm import joinedload
 
-from functions_tests import get_search_criteria
-from functions_tests import regex_fail_list
-from functions_tests import make_new_test
-from functions_tests import clean_exceptions
-from functions_tests import open_internal_tests
+from gui.functions_tests import get_search_criteria
+from gui.functions_tests import regex_fail_list
+from gui.functions_tests import make_new_test
+from gui.functions_tests import clean_exceptions
+from gui.functions_tests import open_internal_tests
 
 # 1. individual internal tests run in dps edit tab
 
@@ -172,11 +172,11 @@ def is_valid_column(column_name):
 
     if "." in column_name:  # Check for nested attributes
         relationship_name, attr_name = column_name.split(".", 1)
-        if hasattr(DpdHeadwords, relationship_name):
-            related_class = getattr(DpdHeadwords, relationship_name).property.mapper.class_
+        if hasattr(DpdHeadword, relationship_name):
+            related_class = getattr(DpdHeadword, relationship_name).property.mapper.class_
             return hasattr(related_class, attr_name)
     else:  # Direct attribute
-        return column_name in [column.name for column in DpdHeadwords.__table__.columns]
+        return column_name in [column.name for column in DpdHeadword.__table__.columns]
     return False
 
 
@@ -197,7 +197,7 @@ def get_nested_attr(obj, attr_str, default=None):
 def test_the_tests(internal_tests_list, window):
 
     # Extract column names
-    column_names = [column.name for column in DpdHeadwords.__table__.columns]
+    column_names = [column.name for column in DpdHeadword.__table__.columns]
     column_names += [""]
 
     # Define logical operators
@@ -268,31 +268,36 @@ def run_individual_internal_tests(
 
         test_results = {}
 
-        for x, criterion in enumerate(search_criteria, start=1):
-            if not criterion[1]:
-                test_results[f"test{x}"] = True
-            elif criterion[1] == "equals":
-                test_results[f"test{x}"] = values[criterion[0]] == criterion[2]
-            elif criterion[1] == "does not equal":
-                test_results[f"test{x}"] = values[criterion[0]] != criterion[2]
-            elif criterion[1] == "contains":
-                test_results[f"test{x}"] = re.findall(
-                    criterion[2], values[criterion[0]]) != []
-            elif criterion[1] == "does not contain":
-                test_results[f"test{x}"] = re.findall(
-                    criterion[2], values[criterion[0]]) == []
-            elif criterion[1] == "contains word":
-                test_results[f"test{x}"] = re.findall(
-                    fr"\b{criterion[2]}\b", values[criterion[0]]) != []
-            elif criterion[1] == "does not contain word":
-                test_results[f"test{x}"] = re.findall(
-                    fr"\b{criterion[2]}\b", values[criterion[0]]) == []
-            elif criterion[1] == "is empty":
-                test_results[f"test{x}"] = values[criterion[0]] == ""
-            elif criterion[1] == "is not empty":
-                test_results[f"test{x}"] = values[criterion[0]] != ""
-            else:
-                print(f"[red]search_{x} error")
+        try:
+            for x, criterion in enumerate(search_criteria, start=1):
+                if not criterion[1]:
+                    test_results[f"test{x}"] = True
+                elif criterion[1] == "equals":
+                    test_results[f"test{x}"] = values[criterion[0]] == criterion[2]
+                elif criterion[1] == "does not equal":
+                    test_results[f"test{x}"] = values[criterion[0]] != criterion[2]
+                elif criterion[1] == "contains":
+                    test_results[f"test{x}"] = re.findall(
+                        criterion[2], values[criterion[0]]) != []
+                elif criterion[1] == "does not contain":
+                    test_results[f"test{x}"] = re.findall(
+                        criterion[2], values[criterion[0]]) == []
+                elif criterion[1] == "contains word":
+                    test_results[f"test{x}"] = re.findall(
+                        fr"\b{criterion[2]}\b", values[criterion[0]]) != []
+                elif criterion[1] == "does not contain word":
+                    test_results[f"test{x}"] = re.findall(
+                        fr"\b{criterion[2]}\b", values[criterion[0]]) == []
+                elif criterion[1] == "is empty":
+                    test_results[f"test{x}"] = values[criterion[0]] == ""
+                elif criterion[1] == "is not empty":
+                    test_results[f"test{x}"] = values[criterion[0]] != ""
+                else:
+                    print(f"[red]search_{x} error")
+        except Exception as e:
+            window["messages"].update(
+                f"{e}", text_color="red")
+            return flags_dps
 
         message = f"{counter+2}. {t.test_name}"
 
@@ -384,7 +389,7 @@ def dps_db_internal_tests(dpspth, pth, db_session, sg, window, flags_dps):
     window["messages"].update("running tests", text_color="white")
     window.refresh()
 
-    dpd_db = db_session.query(DpdHeadwords).options(joinedload(DpdHeadwords.sbs), joinedload(DpdHeadwords.ru)).all()
+    dpd_db = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs), joinedload(DpdHeadword.ru)).all()
     db_internal_tests_list = make_db_internal_tests_list(dpspth)
 
     db_internal_tests_list = clean_exceptions(dpd_db, db_internal_tests_list)
@@ -642,7 +647,7 @@ def dps_dpd_db_internal_tests(dpspth, db_session, pth, sg, window, flags):
     window["messages"].update("running tests", text_color="white")
     window.refresh()
 
-    dpd_db = db_session.query(DpdHeadwords).options(joinedload(DpdHeadwords.sbs), joinedload(DpdHeadwords.ru)).all()
+    dpd_db = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs), joinedload(DpdHeadword.ru)).all()
     db_internal_tests_list = make_dpd_db_internal_tests_list(pth)
 
     db_internal_tests_list = clean_exceptions(dpd_db, db_internal_tests_list)

@@ -2,8 +2,8 @@
 from pathlib import Path
 from json import loads
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 
 from tools.pali_text_files import cst_texts
 from tools.cst_sc_text_sets import make_sc_text_set
@@ -14,7 +14,7 @@ from tools.paths import ProjectPaths
 
 pth = ProjectPaths()
 db_session = get_db_session(pth.dpd_db_path)
-cst_texts_dir = Path("resources/tipitaka-xml/roman_txt")
+cst_texts_dir = Path("resources/tipitaka-xml/romn_txt")
 
 
 def main():
@@ -35,9 +35,7 @@ def main():
 
 def make_all_inflections_set():
 
-    inflections_db = db_session.query(
-        DpdHeadwords.inflections
-    ).all()
+    inflections_db = db_session.query(DpdHeadword.inflections).all()
     all_inflections_set = set()
     for i in inflections_db:
         all_inflections_set.update(loads(i.inflections))

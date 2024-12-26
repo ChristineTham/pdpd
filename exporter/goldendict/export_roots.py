@@ -2,59 +2,43 @@
 
 import re
 
-from css_html_js_minify import css_minify, js_minify
 from mako.template import Template
 from minify_html import minify
-from rich import print
 from sqlalchemy.orm import Session
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Union
 
-from export_dpd import render_header_templ
 from exporter.goldendict.helpers import TODAY
 
-from db.models import DpdRoots, FamilyRoot
-from exporter.ru_components.tools.paths_ru import RuPaths
-from exporter.ru_components.tools.tools_for_ru_exporter import ru_replace_abbreviations
+from db.models import DpdRoot, FamilyRoot
+from exporter.goldendict.ru_components.tools.paths_ru import RuPaths
+from exporter.goldendict.ru_components.tools.tools_for_ru_exporter import ru_replace_abbreviations
 from tools.niggahitas import add_niggahitas
 from tools.pali_sort_key import pali_sort_key
 from tools.paths import ProjectPaths
-from tools.tic_toc import bip, bop
-from tools.utils import RenderResult, RenderedSizes, default_rendered_sizes
-
+from tools.printer import p_green, p_yes
+from tools.utils import RenderedSizes, default_rendered_sizes, squash_whitespaces
+from tools.goldendict_exporter import DictEntry
 
 def generate_root_html(
-                db_session: Session,
-                pth: ProjectPaths,
-                roots_count_dict: Dict[str, int],
-                rupth: RuPaths,
-                lang="en",
-                dps_data=False
-                ) -> Tuple[List[RenderResult], RenderedSizes]:
-    """compile html componenents for each pali root"""
+    db_session: Session,
+    pth: ProjectPaths,
+    roots_count_dict: Dict[str, int],
+    rupth: RuPaths,
+    lang="en",
+    show_ru_data=False
+) -> Tuple[List[DictEntry], RenderedSizes]:
+    """compile html components for each pali root"""
 
-    print("[green]generating roots html")
-
+    p_green("generating roots html")
     size_dict = default_rendered_sizes()
+    root_data_list: List[DictEntry] = []
 
-    root_data_list: List[RenderResult] = []
+    if lang == "en":
+        header_templ = Template(filename=str(pth.root_header_templ_path))
+    elif lang == "ru":
+        header_templ = Template(filename=str(rupth.root_header_templ_path))
 
-    with open(pth.roots_css_path) as f:
-        roots_css = f.read()
-    roots_css = css_minify(roots_css)
-
-    with open(pth.buttons_js_path) as f:
-        buttons_js = f.read()
-    buttons_js = js_minify(buttons_js)
-
-    header_templ = Template(filename=str(pth.header_templ_path))
-
-    header = render_header_templ(
-        pth, css=roots_css, js=buttons_js, header_templ=header_templ)
-
-    roots_db = db_session.query(DpdRoots).all()
-    root_db_length = len(roots_db)
-
-    bip()
+    roots_db = db_session.query(DpdRoot).all()
 
     for counter, r in enumerate(roots_db):
 
@@ -66,10 +50,13 @@ def generate_root_html(
         if r.panini_english:
             r.panini_english = r.panini_english.replace("\n", "<br>")
 
-        html = header
+        html = ""
         html += "<body>"
 
-        definition = render_root_definition_templ(pth, r, roots_count_dict, rupth, lang, dps_data)
+        root_header = render_root_header_templ(
+            pth, r=r, date=str(TODAY), header_templ=header_templ)
+
+        definition = render_root_definition_templ(pth, r, roots_count_dict, rupth, lang, show_ru_data)
         html += definition
         size_dict["root_definition"] += len(definition)
 
@@ -91,7 +78,7 @@ def generate_root_html(
 
         html += "</body></html>"
 
-        html = minify(html)
+        html = squash_whitespaces(root_header) + minify(html)
 
         synonyms: set = set()
         synonyms.add(r.root_clean)
@@ -108,7 +95,7 @@ def generate_root_html(
         synonyms = set(add_niggahitas(list(synonyms)))
         size_dict["root_synonyms"] += len(str(synonyms))
 
-        res = RenderResult(
+        res = DictEntry(
             word = r.root,
             definition_html = html,
             definition_plain = "",
@@ -117,22 +104,29 @@ def generate_root_html(
 
         root_data_list.append(res)
 
-        if counter % 100 == 0:
-            print(
-                f"{counter:>10,} / {root_db_length:<10,}{r.root:<20} {bop():>10}")
-            bip()
-
+    p_yes(len(root_data_list))
     return root_data_list, size_dict
 
 
+def render_root_header_templ(
+    __pth__: Union[ProjectPaths, RuPaths],
+    r: DpdRoot,
+    date: str,
+    header_templ: Template
+) -> str:
+    """render the html header with variables"""
+
+    return str(header_templ.render(r=r, date=date))
+
+
 def render_root_definition_templ(
-                        pth: ProjectPaths,
-                        r: DpdRoots, 
-                        roots_count_dict,
-                        rupth: RuPaths,
-                        lang="en", 
-                        dps_data=False
-                    ):
+    pth: ProjectPaths,
+    r: DpdRoot, 
+    roots_count_dict,
+    rupth: RuPaths,
+    lang="en", 
+    show_ru_data=False
+):
     """render html of main root info"""
 
     if lang == "en":
@@ -141,23 +135,26 @@ def render_root_definition_templ(
         root_definition_templ = Template(filename=str(rupth.root_definition_templ_path))
     # add here another language elif ...
 
-    count = roots_count_dict[r.root]
+    try:
+        count = roots_count_dict[r.root]
+    except KeyError:
+        count = 0
 
     return str(
         root_definition_templ.render(
             r=r,
             count=count,
             today=TODAY,
-            dps_data=dps_data))
+            show_ru_data=show_ru_data))
 
 
 def render_root_buttons_templ(
-                        pth: ProjectPaths,
-                        r: DpdRoots, 
-                        db_session: Session,
-                        rupth: RuPaths,
-                        lang="en",
-                    ):
+    pth: ProjectPaths,
+    r: DpdRoot, 
+    db_session: Session,
+    rupth: RuPaths,
+    lang="en",
+):
     """render html of root buttons"""
     
     if lang == "en":
@@ -166,10 +163,9 @@ def render_root_buttons_templ(
         root_buttons_templ = Template(filename=str(rupth.root_button_templ_path))
     # add here another language elif ...
 
-    frs = db_session.query(
-        FamilyRoot
-        ).filter(
-            FamilyRoot.root_key == r.root)
+    frs = db_session \
+        .query(FamilyRoot) \
+        .filter(FamilyRoot.root_key == r.root)
 
     frs = sorted(frs, key=lambda x: pali_sort_key(x.root_family))
 
@@ -180,11 +176,11 @@ def render_root_buttons_templ(
 
 
 def render_root_info_templ(
-                pth: ProjectPaths, 
-                r: DpdRoots, 
-                rupth: RuPaths,
-                lang="en"
-            ):
+    pth: ProjectPaths, 
+    r: DpdRoot, 
+    rupth: RuPaths,
+    lang="en"
+):
     """render html of root grammatical info"""
 
     if lang == "en":
@@ -203,12 +199,12 @@ def render_root_info_templ(
 
 
 def render_root_matrix_templ(
-                pth: ProjectPaths, 
-                r: DpdRoots, 
-                roots_count_dict, 
-                rupth: RuPaths,
-                lang="en"
-            ):
+    pth: ProjectPaths, 
+    r: DpdRoot, 
+    roots_count_dict, 
+    rupth: RuPaths,
+    lang="en"
+):
     """render html of root matrix"""
 
     if lang == "en":
@@ -219,7 +215,10 @@ def render_root_matrix_templ(
         root_matrix = ru_replace_abbreviations(r.root_matrix, "root")
     # add here another language elif ...
 
-    count = roots_count_dict[r.root]
+    try:
+        count = roots_count_dict[r.root]
+    except KeyError:
+        count = 0
 
     return str(
         root_matrix_templ.render(
@@ -230,12 +229,12 @@ def render_root_matrix_templ(
 
 
 def render_root_families_templ(
-                pth: ProjectPaths,
-                r: DpdRoots, 
-                db_session: Session, 
-                rupth: RuPaths,
-                lang="en"
-            ):
+    pth: ProjectPaths,
+    r: DpdRoot, 
+    db_session: Session, 
+    rupth: RuPaths,
+    lang="en"
+):
     """render html of root families"""
 
     if lang == "en":
@@ -244,11 +243,9 @@ def render_root_families_templ(
         root_families_templ = Template(filename=str(rupth.root_families_templ_path))
     # add here another language elif ...
 
-    frs = db_session.query(
-        FamilyRoot
-        ).filter(
-            FamilyRoot.root_key == r.root,
-        ).all()
+    frs = db_session.query(FamilyRoot) \
+        .filter(FamilyRoot.root_key == r.root,) \
+        .all()
 
     frs = sorted(frs, key=lambda x: pali_sort_key(x.root_family))
 

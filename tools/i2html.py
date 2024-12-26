@@ -8,15 +8,15 @@ from jinja2 import Environment, FileSystemLoader
 from rich import print
 from typing import List
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords, SBS, Russian
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword, SBS, Russian
 
 from tools.configger import config_test
 from tools.exporter_functions import get_family_compounds
 from tools.exporter_functions import get_family_set
 from tools.paths import ProjectPaths
 from tools.meaning_construction import summarize_construction
-from tools.meaning_construction import make_meaning_html
+from tools.meaning_construction import make_meaning_combo_html
 from tools.meaning_construction import make_grammar_line
 from tools.meaning_construction import degree_of_completion
 from tools.date_and_time import year_month_day_dash
@@ -28,7 +28,7 @@ class HeadwordData():
     def __init__(self, css, js, i, fc, fs, sbs, ru):
         self.css = css
         self.js = js
-        self.meaning = make_meaning_html(i)
+        self.meaning = make_meaning_combo_html(i)
         self.summary = summarize_construction(i)
         self.complete = degree_of_completion(i)
         self.grammar = make_grammar_line(i)
@@ -43,10 +43,10 @@ class HeadwordData():
             self.make_link = True
         else:
             self.make_link = False
-        if config_test("dictionary", "show_dps_data", "yes"):
-            self.dps_data = True
+        if config_test("dictionary", "show_sbs_data", "yes"):
+            self.show_sbs_data = True
         else:
-            self.dps_data = False
+            self.show_sbs_data = False
         
 
     @staticmethod
@@ -104,8 +104,8 @@ def make_html(
     html = header_templ.render(css=css, js=js)
 
     # iterate over headwords
-    results = db_session.query(DpdHeadwords)\
-        .filter(DpdHeadwords.lemma_1.in_(headwords)).all()
+    results = db_session.query(DpdHeadword)\
+        .filter(DpdHeadword.lemma_1.in_(headwords)).all()
 
     for counter, i in enumerate(results):
         fc = get_family_compounds(i)

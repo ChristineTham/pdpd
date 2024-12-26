@@ -1,0 +1,480 @@
+:root {
+    --background-light: rgb(226, 235, 237);
+    --foreground-light: rgb(7, 2, 28);
+    --background-dark: rgb(7, 2, 28);
+    --foreground-dark: rgb(226, 235, 237);
+    --gray: gray;
+    --transparent: rgba(138, 138, 138, 0.253);
+    --colour0: #00718d;
+    --colour1: #00A4CC;
+    --colour2: #65DBFF;
+    --root-colour1: #AB3C00;
+    --root-colour2: #F95700;;
+}
+
+.dark-mode {
+    background-color: var(--background-dark);
+    color: var(--foreground-dark);
+}
+
+body {
+    background-color: var(--background-light);
+    color: var(--foreground-light);
+    font-family: "sans";
+    font-size: 1em;
+    transition: 1s;
+    scroll-behavior: smooth;
+}
+
+.header-pane {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 10px;
+}
+
+.logo-title {
+    display: flex;
+    align-items: center;
+}
+
+.header-image {
+    vertical-align: middle;
+    height: 30px;
+    width: 30px;
+}
+
+h2 {
+    font-size: 150%;
+    margin: 5px;
+}
+
+h3 {
+    font-size: 130%;
+    margin-top: 5px;
+}
+
+a {
+    color: var(--colour1);
+}
+
+.title {
+    margin: 5px;
+}
+
+.search-box {
+    background-color:var(--background-light) ;
+    border-color: var(--gray);
+    border-radius: 7px;
+    color: var(--foreground-light);
+    font-family: "Dejavu Sans";
+    font-size: 130%;
+    height: 30px;
+    margin: 5px;
+    padding: 2px 10px;
+    transition: 1s;
+    width: 300px;
+}
+
+.search-box:active {
+    border-color: var(--colour1);
+}
+
+.dark-mode .search-box {
+    background-color: var(--background-dark);
+    border-color: var(--colour2);
+    color: var(--foreground-dark);
+}
+
+.search-button {
+    background-color: var(--colour2);
+    border-radius: 7px;
+    border: 2px solid var(--gray);
+    color: black;
+    height: 30px;
+    margin: 5px;
+    padding: 2px 10px;
+    padding: 5px 10px;
+    transition: 1s;
+}
+
+.help {
+    position: relative;
+    cursor: help;
+}
+
+.tooltip {
+    position: absolute;
+    background-color: var(--colour2);
+    border-radius: 7px;
+    border: 2px solid var(--gray);
+    color: black;
+    padding: 10px;
+    text-align: left;
+    visibility: hidden;
+    z-index: 1;
+    opacity: 90%;
+}
+
+.help:hover .tooltip{
+    visibility: visible;
+}
+
+
+.main-pane {
+    display: flex;
+    flex-direction: row;
+    height: 85vb;
+    overflow-y: clip;
+    justify-content: center;
+}
+
+.history-pane {
+    border-radius: 7px;
+    border: 2px solid var(--transparent);
+    display: flex;
+    flex-direction: column;
+    flex-direction: column;
+    flex: 1;
+    list-style-type: none;
+    margin: 5px;
+    overflow-x: auto;
+    overflow-y: auto;
+    padding: 5px 20px;
+    position: relative;
+}
+
+.history-pane h3 {
+    text-align: left;
+}
+
+.history-list-pane ul {
+    padding-left: 20px;
+}
+
+.history-pane::-webkit-scrollbar {
+    width: 10px;
+}
+
+.history-pane::-webkit-scrollbar-track {
+    background-color: var(--background-light);
+}
+
+.dark-mode .history-pane::-webkit-scrollbar-track {
+    background-color: var(--background-dark);
+}
+
+.history-pane::-webkit-scrollbar-thumb {
+    border-radius: 5px;
+    background-color: var(--gray);
+}
+
+.clear-history-button {
+    position: absolute;
+    top: 5px; 
+    right: 5px; 
+    padding: 5px 10px; 
+    font-size: 0.8em; 
+    background-color: var(--colour2);
+    color: var(--foreground-light);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    width: auto;
+    display: inline-block;
+    transition: 1s;
+}
+
+.clear-history-button:hover {
+    background-color: red;
+}
+
+p.message {
+    text-align: center;
+    line-height: 150%;
+    padding: 1%;
+    
+}
+
+.summary-results b {
+    font-weight: normal;
+}
+
+.summary-results h3 {
+    margin-bottom: 10px;
+}
+
+.summary-results hr {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    border-color: var(--gray);
+}
+
+.summary-link {
+    color: var(--colour1);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.root-summary-link {
+    color: var(--root-colour1);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.dpd-pane {
+    border-radius: 7px;
+    border: 2px solid var(--transparent);
+    flex: 3;
+    padding: 5px;
+    overflow-y: auto;
+    margin: 5px;
+}
+
+.dpd-pane::-webkit-scrollbar {
+    width: 10px;
+}
+
+.dpd-pane::-webkit-scrollbar-track {
+    background-color: var(--background-light);
+    transition: background-color 1s;
+}
+
+.dark-mode .dpd-pane::-webkit-scrollbar-track {
+    background-color: var(--background-dark);
+    transition: background-color 1s;
+}
+
+.dpd-pane::-webkit-scrollbar-thumb {
+    border-radius: 5px;
+    background-color: var(--gray);
+    transition: background-color 1s;
+}
+
+.settings-pane {
+    border-radius: 7px;
+    border: 2px solid var(--transparent);
+    flex-direction: column;
+    flex: 1;
+    margin: 5px;
+    padding: 5px 20px;
+}
+
+.settings-pane h3 {
+    text-align: left;
+}
+
+.settings-pane p {
+    padding: 5px;
+}
+
+.small-button {
+    background-color: var(--colour2);
+    height: 1.3em;
+    width: 1.3em;
+    border-radius: 1em;
+    border-width: 0;
+    font-size: 1em;
+}
+
+.small-button:active {
+    background-color: var(--colour1);
+}
+
+.footer-pane {
+    border-radius: 7px;
+    border: var(--transparent) 2px solid;
+    color: var(--foreground-light);
+    display: flex;
+    justify-content: center;
+    margin: 5px;
+    padding: 10px;
+    text-align: center;
+    transition: 1s;
+    width: 98%;
+}
+
+.footer-pane a {
+    color: var(--colour1);
+    text-decoration: none;
+    transition: 1s;
+}
+
+.dark-mode .footer-pane {
+    color: var(--foreground-dark);
+}
+
+.footer-pane a:hover {
+    color: var(--colour0);
+}
+
+.dark-mode .footer-pane a:hover {
+    color: var(--colour0);
+}
+
+/* Language Switcher Container */
+.language-switcher {
+    position: relative;
+    display: inline-block;
+    margin: 5px; /* Adds some spacing around the icon */
+}
+
+/* Language Icon (Clickable) */
+.language-icon {
+    cursor: pointer;
+    font-size: 1.2em; /* Adjust size as needed */
+    color: var(--foreground-light); /* Consistent color */
+    transition: color 0.3s;
+}
+
+.language-icon:hover {
+    color: var(--colour1); /* Change color on hover */
+}
+
+/* Dropdown Menu */
+.dropdown {
+    display: none; /* Hidden by default */
+    position: absolute;
+    top: 100%; /* Position right below the icon */
+    left: 0;
+    background-color: var(--colour2); /* Matches primary color */
+    border-radius: 7px; /* Consistent rounded corners */
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); /* Adds subtle shadow */
+    min-width: 120px; /* Minimum width for better readability */
+    z-index: 1000; /* Ensure dropdown appears above other content */
+}
+
+/* Dropdown Links */
+.dropdown a {
+    display: block;
+    padding: 8px 12px; /* Padding for comfortable clicking */
+    color: black; /* Text color */
+    text-decoration: none;
+    font-family: sans-serif; /* Matches other text */
+    font-size: 0.9em; /* Slightly smaller font size */
+    transition: background-color 0.3s; /* Smooth background transition */
+}
+
+/* Hover Effect for Links */
+.dropdown a:hover {
+    background-color: var(--colour1); /* Background color change on hover */
+    color: var(--foreground-dark); /* Ensure text is readable on hover */
+}
+
+/* Dark Mode Adjustments */
+.dark-mode .language-icon {
+    color: var(--foreground-dark);
+}
+
+.dark-mode .dropdown {
+    background-color: var(--background-dark);
+}
+
+.dark-mode .dropdown a {
+    color: var(--foreground-dark);
+}
+
+.dark-mode .dropdown a:hover {
+    background-color: var(--colour1);
+    color: var(--background-dark);
+}
+
+@media (max-width: 750px) {
+
+    .dropdown {
+        min-width: 100px; /* Adjust width on smaller screens */
+    }
+
+    .dropdown a {
+        padding: 6px 10px; /* Smaller padding on mobile */
+        font-size: 0.85em; /* Slightly smaller font for compact view */
+    }
+
+    .header-pane {
+        flex-direction: column;
+        margin: 0px;
+        padding: 0px;
+    }
+
+    .header-pane .title,
+    .header-pane .search-box,
+    .header-pane button {
+        width: 100%;
+        box-sizing: border-box;
+        margin: 2px;
+        justify-content: center;
+        text-align: center;
+        box-sizing: border-box;
+    }
+
+    .help {
+        visibility: hidden;
+    }
+
+    .main-pane {
+        flex-direction: column;
+        height: auto;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .dpd-pane {
+        order: 1;
+        height: auto;
+        margin: 5px;
+        padding: 5px;
+        overflow-y: auto; 
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .history-pane {
+        order: 2; 
+        padding: 5px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .history-pane h3 {
+        text-align: center;
+        padding-bottom: 0px;
+        margin-bottom: 0%;
+    }
+
+    .history-list-pane {
+        white-space: nowrap;
+        overflow-x: auto;
+    }
+    
+    .history-list-pane ul {
+        padding-left: 0;
+        list-style-type: none;
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap; 
+        gap: 0.3em;
+    }
+
+    li:not(:last-child)::after {
+        content: ", ";
+    }
+
+    .settings-pane {
+        order: 3;
+        display: flex;
+        margin: 5px;
+        padding: 5px;
+        box-sizing: border-box;
+        width: 100%;
+    }
+
+    .settings-pane h3 {
+        text-align: center;
+    }
+
+    .footer-pane {
+        box-sizing: border-box;
+        width: 100%;
+        flex-direction: column;
+    }
+}

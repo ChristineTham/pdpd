@@ -1,14 +1,15 @@
 """Functions for:
-1. Summarizating meaning and literal meaning,
-2. Summarizating construction,
+1. Summarizing meaning and literal meaning,
+2. Summarizing construction,
 3. Cleaning construction of all brackets and phonetic changes,
-4. Creating an HTML styled symbol of a word data's degree of complettion."""
+4. Creating an HTML styled symbol of a word data's degree of completion."""
 
 import re
-from db.models import DpdHeadwords
+
+from db.models import DpdHeadword
 
 
-def make_meaning(i: DpdHeadwords) -> str:
+def make_meaning_combo(i: DpdHeadword) -> str:
 	"""Compile meaning_1 and literal meaning, or return meaning_2."""
 	if i.meaning_1:
 		meaning: str = i.meaning_1
@@ -20,7 +21,7 @@ def make_meaning(i: DpdHeadwords) -> str:
 	else:
 		return ""
 
-def make_meaning_html(i: DpdHeadwords) -> str:
+def make_meaning_combo_html(i: DpdHeadword) -> str:
     """Compile html of meaning_1 and literal meaning, or return meaning_2.
     Meaning_1 in <b>bold</b>"""
 
@@ -39,7 +40,7 @@ def make_meaning_html(i: DpdHeadwords) -> str:
             return f"<b>{i.meaning_2}</b>"
 
 
-def make_grammar_line(i: DpdHeadwords) -> str:
+def make_grammar_line(i: DpdHeadword) -> str:
     """Compile grammar line"""
     
     grammar = i.grammar
@@ -54,9 +55,10 @@ def make_grammar_line(i: DpdHeadwords) -> str:
     return grammar
      
 
-def summarize_construction(i: DpdHeadwords) -> str:
+def summarize_construction(i: DpdHeadword) -> str:
     """Create a summary of a word's construction,
-    exlucing brackets and phonetic changes."""
+    excluding brackets and phonetic changes."""
+    
     if "<b>" in i.construction:
         i.construction = i.construction.replace("<b>", "").replace("</b>", "")
 
@@ -132,12 +134,22 @@ def clean_construction(construction):
     return construction
 
 
-def degree_of_completion(i):
+def degree_of_completion(i: DpdHeadword, html=True):
     """Return html styled symbol of a word data degree of completion."""
     if i.meaning_1:
         if i.source_1:
-            return """<span class="gray">✓</span>"""
+            if html:
+                return """<span class="gray">✔</span>"""
+            else:
+                return "✔"
+                 
         else:
-            return """<span class="gray">~</span>"""
+            if html:
+                return """<span class="gray">◑</span>"""
+            else:
+                return "◑"
     else:
-        return """<span class="gray">✗</span>"""
+        if html:
+            return """<span class="gray">✘</span>"""
+        else:
+            return "✘"

@@ -15,8 +15,8 @@ from mako.template import Template
 from sqlalchemy import update
 from sqlalchemy.orm.session import Session
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 
 from tools.pos import INDECLINABLES, CONJUGATIONS, DECLENSIONS
 from tools.configger import config_test, config_update
@@ -28,6 +28,18 @@ from tools.utils import list_into_batches
 
 def main():
     tic()
+    print("[bright_yellow]mapmaker")
+    
+    if not (
+        config_test("exporter", "make_dpd", "yes") or 
+        config_test("regenerate", "db_rebuild", "yes") or 
+        config_test("exporter", "make_tpr", "yes") or 
+        config_test("exporter", "make_ebook", "yes")
+    ):
+        print("[green]disabled in config.ini")
+        toc()
+        return
+
     # check config
     if (
         config_test("regenerate", "freq_maps", "yes")
@@ -60,8 +72,11 @@ def main():
     make_data_dict_and_html(pth, db_session, dicts, num_logical_cores, regenerate_all)
     db_session.close()
 
+    # reset config
     if regenerate_all:
         config_update("regenerate", "freq_maps", "no")
+    if config_test("regenerate", "db_rebuild", "yes"):
+            config_update("regenerate", "db_rebuild", "no")
 
     toc()
 
@@ -104,20 +119,17 @@ def test_changed_headwords(pth: ProjectPaths):
 def test_html_file_missing(db_session: Session):
     print("[green]test if html file is missing", end=" ")
 
-    idioms_db = db_session.query(
-        DpdHeadwords.id, DpdHeadwords.pos
-    ).filter(
-        DpdHeadwords.pos == "idiom"
-    ).all()
+    idioms_db = db_session.query(DpdHeadword.id, DpdHeadword.pos) \
+        .filter(DpdHeadword.pos == "idiom") \
+        .all()
 
     idioms_list = [i.id for i in idioms_db]
 
-    missing_html_db = db_session.query(
-        DpdHeadwords.id, DpdHeadwords.freq_html
-    ).filter(
-        DpdHeadwords.freq_html == "",
-        DpdHeadwords.id.notin_(idioms_list)
-    ).all()
+    missing_html_db = db_session.query(DpdHeadword.id, DpdHeadword.freq_html) \
+        .filter(
+            DpdHeadword.freq_html == "",
+            DpdHeadword.id.notin_(idioms_list)) \
+        .all()
 
     global html_file_missing
     html_file_missing = [i.id for i in missing_html_db]
@@ -333,8 +345,8 @@ class ParsedResult(TypedDict):
     id: int
     freq_html: str
 
-def _parse_item(i: DpdHeadwords, dicts: List[dict]) -> ParsedResult:
-    inflections = i.inflections_list
+def _parse_item(i: DpdHeadword, dicts: List[dict]) -> ParsedResult:
+    inflections = i.inflections_list_all    # this include all api ca eva iti
 
     section = 1
     d = {}
@@ -379,7 +391,7 @@ def _parse_item(i: DpdHeadwords, dicts: List[dict]) -> ParsedResult:
         map_html += str(template.render(d=d))
 
     else:
-        map_html += f"""<p class="heading">There are no exact matches of <b>{superscripter_uni(i.lemma_1)} or it's inflections</b> in the Chaṭṭha Saṅgāyana corpus.</p>"""
+        map_html += f"""<p class="heading">There are no exact matches of <b>{superscripter_uni(i.lemma_1)} or its inflections</b> in the Chaṭṭha Saṅgāyana corpus.</p>"""
 
     return ParsedResult(id=i.id, freq_html=map_html)
 
@@ -392,9 +404,9 @@ def make_data_dict_and_html(
 ):
     print("[green]compiling data csvs and html")
 
-    dpd_db = db_session.query(DpdHeadwords).all()
+    dpd_db = db_session.query(DpdHeadword).all()
 
-    def _keep(i: DpdHeadwords) -> bool:
+    def _keep(i: DpdHeadword) -> bool:
         """Filter predicate function which returns whether an item should be kept.
         """
         return (i.pos != "idiom" and \
@@ -403,7 +415,7 @@ def make_data_dict_and_html(
                  i.id in html_file_missing or \
                  regenerate_all is True))
 
-    # Filter the DpdHeadwords and Derived data list, while keeping the related items together in a Tuple.
+    # Filter the DpdHeadword and Derived data list, while keeping the related items together in a Tuple.
     filtered_pairs: List = [i for i in dpd_db if _keep(i)]
 
     # Split the list into batches, each batch will be assigned to a Process() thread.
@@ -470,7 +482,7 @@ def make_data_dict_and_html(
 
     # Add the results to the database.
     print("[green]adding to db", end=" ")
-    db_session.execute(update(DpdHeadwords), add_to_db)
+    db_session.execute(update(DpdHeadword), add_to_db)
     db_session.commit()
     db_session.close()
     print(len(add_to_db))
@@ -479,16 +491,5 @@ def make_data_dict_and_html(
 
 
 if __name__ == "__main__":
-    print("[bright_yellow]mapmaker")
-    if (
-        config_test("exporter", "make_dpd", "yes") or 
-        config_test("regenerate", "db_rebuild", "yes") or 
-        config_test("exporter", "make_tpr", "yes") or 
-        config_test("exporter", "make_ebook", "yes")
-    ):
-        main()
-        if config_test("regenerate", "db_rebuild", "yes"):
-            config_update("regenerate", "db_rebuild", "no")
-    else:
-        print("generating is disabled in the config")
+    main()
 

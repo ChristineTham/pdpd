@@ -8,11 +8,11 @@ from tools.paths import ProjectPaths
 
 def main():
     from rich import print
-    from db.get_db_session import get_db_session
-    from db.models import DpdHeadwords
+    from db.db_helpers import get_db_session
+    from db.models import DpdHeadword
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
-    db = db_session.query(DpdHeadwords).all()
+    db = db_session.query(DpdHeadword).all()
     count = 0
 
     for i in db:

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Postprocess the results, find top five most likely candidates and save to database.
+Postprocess the results, find top five 
+most likely candidates and save to database.
 """
 
 import numpy as np
@@ -15,7 +16,7 @@ from sqlalchemy.orm.session import Session
 from tools.lookup_is_another_value import is_another_value
 from tools.update_test_add import update_test_add
 
-from db.get_db_session import get_db_session
+from db.db_helpers import get_db_session
 from db.models import Lookup
 from tools.paths import ProjectPaths
 from tools.tic_toc import tic, toc
@@ -24,6 +25,17 @@ from tools.configger import config_test
 
 def main():
     tic()
+    print("[bright_yellow]post-processing sandhi-splitter")
+    
+    if not (
+        config_test("exporter", "make_deconstructor", "yes")
+        or config_test("exporter", "make_tpr", "yes")
+        or config_test("exporter", "make_ebook", "yes")
+        or config_test("regenerate", "db_rebuild", "yes")
+    ):
+        print("[green]disabled in config.ini")
+        return
+        toc()
 
     if config_test("deconstructor", "include_cloud", "yes"):
         ADD_DO = True
@@ -215,7 +227,11 @@ def letter_counts(pth: ProjectPaths, df):
         if len(word) >= 10:
             letters[10].append(word)
         else:
-            letters[len(word)].append(word)
+            try:
+                letters[len(word)].append(word)
+            except KeyError:
+                print(f"[red][underline]{word}[/underline] is causing problems")
+
 
     for i in range(1, 11):
         letters_df = pd.DataFrame(letters[i])
@@ -227,13 +243,4 @@ def letter_counts(pth: ProjectPaths, df):
 
 
 if __name__ == "__main__":
-    print("[bright_yellow]post-processing sandhi-splitter")
-    if (
-        config_test("exporter", "make_deconstructor", "yes")
-        or config_test("exporter", "make_tpr", "yes")
-        or config_test("exporter", "make_ebook", "yes")
-        or config_test("regenerate", "db_rebuild", "yes")
-    ):
-        main()
-    else:
-        print("generating is disabled in the config")
+    main()

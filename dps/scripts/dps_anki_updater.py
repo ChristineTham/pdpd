@@ -3,8 +3,9 @@
 """Update DPS Anki deck with latest data directly from the DB."""
 
 import copy
-import csv
 import os
+import datetime
+import sys
 
 from anki.collection import Collection
 from anki.errors import DBError
@@ -14,19 +15,20 @@ from anki.cards import Card
 from rich import print
 from typing import List, Dict
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 
 from tools.configger import config_read
 from tools.paths import ProjectPaths
 from dps.tools.paths_dps import DPSPaths
 from tools.tic_toc import tic, toc, bip, bop
 
-from tools.date_and_time import day
-
 from sqlalchemy.orm import joinedload
 
-date = day()
+# Check if 'test' argument is provided
+update_test_field = 'test' in sys.argv
+
+current_date = datetime.date.today().strftime("%m-%d")
 
 dpspth = DPSPaths()
 
@@ -40,8 +42,10 @@ def main():
     print(f"[green]{'setup dbs':<20}", end="")
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
-    db = db_session.query(DpdHeadwords).options(joinedload(DpdHeadwords.sbs), joinedload(DpdHeadwords.ru)).all()
+    db = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs), joinedload(DpdHeadword.ru)).all()
     print(f"{len(db):>10} {bop()}")
+
+    calculate_index(db, db_session)
 
     decks = ["Пали Словарь"]
     (
@@ -55,6 +59,8 @@ def main():
     if carry_on:
         update_from_db(
             db, col, data_dict, deck_dict, model_dict)
+
+    print(f"test {current_date}")
     
     toc()
 
@@ -258,10 +264,10 @@ def update_note_values(note, i):
     tags = " ".join(note.tags)  # Convert list of tags to a single string
 
     note["id"] = str(i.id)
-    note["pali_1"] = str(i.lemma_1)
+    note["pali"] = str(i.lemma_1)
     if i.ru:
-        note["native_meaning"] = str(i.ru.ru_meaning)
-        note["native_meaning_lit"] = str(i.ru.ru_meaning_lit)
+        note["ru_meaning"] = str(i.ru.ru_meaning)
+        note["ru_meaning_lit"] = str(i.ru.ru_meaning_lit)
         note["ru_notes"] = str(i.ru.ru_notes).replace("\n", "<br>")
 
     if i.sbs:
@@ -269,6 +275,7 @@ def update_note_values(note, i):
         note["sbs_class_anki"] = str(i.sbs.sbs_class_anki)
         note["sbs_category"] = str(i.sbs.sbs_category)
         note["sbs_class"] = str(i.sbs.sbs_class)
+        note["sbs_patimokkha"] = str(i.sbs.sbs_patimokkha)
         note["sbs_source_1"] = str(i.sbs.sbs_source_1)
         note["sbs_sutta_1"] = str(i.sbs.sbs_sutta_1).replace("\n", "<br>")
         note["sbs_example_1"] = str(i.sbs.sbs_example_1).replace("\n", "<br>")
@@ -294,6 +301,7 @@ def update_note_values(note, i):
         note["sbs_chant_eng_4"] = str(i.sbs.sbs_chant_eng_4)
         note["sbs_chapter_4"] = str(i.sbs.sbs_chapter_4)
         note["sbs_notes"] = str(i.sbs.sbs_notes).replace("\n", "<br>")
+        note["sbs_index"] = str(i.sbs.sbs_index)
 
     note["grammar"] = str(i.grammar)
     note["neg"] = str(i.neg)
@@ -310,25 +318,25 @@ def update_note_values(note, i):
         ):
             # Remove everything after " lit." in 'meaning_2'
             meaning_2_without_lit = i.meaning_2.split("; lit.")[0]
-            note['meaning_1'] = meaning_2_without_lit
+            note['meaning'] = meaning_2_without_lit
             # print(f"meaning_2_without_lit {i.lemma_1}") # Debugging line
         elif (
             not i.meaning_1 and 
             i.meaning_lit and 
             i.meaning_2
         ):
-            note['meaning_1'] = i.meaning_2
+            note['meaning'] = i.meaning_2
             # print(f"meaning_2=meaning_1 {i.lemma_1}") # Debugging line
         elif (
             not i.meaning_1 and 
             not i.meaning_lit and 
             i.meaning_2
         ):
-            note['meaning_1'] = i.meaning_2
+            note['meaning'] = i.meaning_2
             # print(f"meaning_2=meaning_1 {i.lemma_1}") # Debugging line
 
         elif i.meaning_1:
-            note['meaning_1'] = i.meaning_1
+            note['meaning'] = i.meaning_1
             # print(f"meaning_1 {i.lemma_1}") # Debugging line
         else:
             print(f"no meaning {i.lemma_1}")
@@ -358,7 +366,8 @@ def update_note_values(note, i):
     note["variant"] = str(i.variant)
     note["commentary"] = str(i.commentary).replace("\n", "<br>")
     note["notes"] = str(i.notes).replace("\n", "<br>")
-    # note["test"] = str(date)
+    if update_test_field:
+        note["test"] = str(current_date)
 
     # 'link' field
     if i.link:
@@ -366,28 +375,14 @@ def update_note_values(note, i):
     else:
         note['link'] = ''
 
-    # sbs_index
-    if i.sbs:
-        chant_index_map = load_chant_index_map()
-        chants = [
-            i.sbs.sbs_chant_pali_1,
-            i.sbs.sbs_chant_pali_2,
-            i.sbs.sbs_chant_pali_3,
-            i.sbs.sbs_chant_pali_4
-        ] if i.sbs else []
-
-        indexes = [chant_index_map.get(chant) for chant in chants if chant in chant_index_map]
-        sbs_index = min(indexes) if indexes else ""   # type: ignore 
-
-        note["sbs_index"] = str(sbs_index)
-
-        # adding _SBS tag if pubbakicca index is 75
-        if sbs_index and sbs_index != 75:
-            if not any(tag.startswith("_SBS") or tag.startswith("*parit") for tag in tags.split()):
-                if tags:
-                    tags += " "
-                tags += "_SBS"
-                note.tags = tags.split()
+    #! UPDATING TAGS NOT WORKING!
+    # adding _SBS tag if pubbakicca index is 75
+    if i.sbs and i.sbs.sbs_index and i.sbs.sbs_index != 75:
+        if not any(tag.startswith("_SBS") or tag.startswith("*parit") for tag in tags.split()):
+            if tags:
+                tags += " "
+            tags += "_SBS"
+            note.tags = tags.split()
             
     # adding _pātimokkha tag if PAT is in the source
     if i.sbs:
@@ -417,11 +412,12 @@ def update_note_values(note, i):
         print("[bold red]no path to anki media")
         sbs_audio = ''
 
-    note["sbs_audio"] = sbs_audio
+    note["audio"] = sbs_audio
 
     # Logic for feedback
-    feedback_url = f'Нашли ошибку? <a class="link" href="https://docs.google.com/forms/d/1iMD9sCSWFfJAFCFYuG9HRIyrr9KFRy0nAOVApM998wM/viewform?usp=pp_url&entry.438735500={i.lemma_1}&entry.1433863141=Anki\">Пожалуйста сообщите</a>.'
-    note["feedback"] = feedback_url
+    feedback_url = f'Нашли ошибку? <a class="link" href="https://docs.google.com/forms/d/1iMD9sCSWFfJAFCFYuG9HRIyrr9KFRy0nAOVApM998wM/viewform?usp=pp_url&entry.438735500={i.lemma_1}&entry.1433863141=Anki-{current_date}\">Пожалуйста сообщите</a>.'
+    if update_test_field:
+        note["feedback"] = feedback_url
 
     is_updated = None
     if note.fields == old_fields:
@@ -441,19 +437,38 @@ def unicode_combo_characters(old_fields, note):
             print(f"> New value: {new_value}")
 
 
-def load_chant_index_map():
-    chant_index_map = {}
-    with open(dpspth.sbs_index_path, 'r', encoding='utf-8') as csvfile:
-        reader = csv.reader(csvfile, delimiter='\t')
-        next(reader)  # Skip header row
-        for row in reader:
-            index, chant = row[0], row[1]
-            chant_index_map[chant] = int(index)
-    return chant_index_map
+def calculate_index(db, db_session):
+    """
+    Recalculates the sbs_index for all entries in the db and commits the changes.
+    
+    """
+
+    print("[green]Calculating sbs_index")
+    try:
+        for i in db:
+            if i.sbs:
+                sbs_index_old = i.sbs.sbs_index
+                sbs_index_value = i.sbs.calculate_index()
+                if sbs_index_old != sbs_index_value:
+                    i.sbs.sbs_index = sbs_index_value  # Manually set the sbs_index
+                    print(f"{i.lemma_1} old index {sbs_index_old} changed to {sbs_index_value}")
+    
+        db_session.commit()
+        
+    except Exception as e:
+        print(f"[bold red]{str(e)}")
 
 
 def deck_selector(i):
-    if i.ru and i.ru.ru_meaning:
+    if (i.ru and i.ru.ru_meaning 
+    and i.sbs 
+    and(
+            i.sbs.sbs_example_1 or 
+            i.sbs.sbs_example_2 or 
+            i.sbs.sbs_example_3 or 
+            i.sbs.sbs_example_4
+        )
+    ):
         return "Пали Словарь"
     else:
         return None

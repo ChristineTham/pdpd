@@ -4,17 +4,19 @@
 
 from rich import print
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 from tools.paths import ProjectPaths
+from tools.printer import p_red
 
 
 def main():
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
-    db = db_session.query(DpdHeadwords).all()
+    db = db_session.query(DpdHeadword).all()
     for counter, i in enumerate(db):
-        print(counter, i.lemma_1)
+        if i.lemma_clean not in i.inflections_list:
+            p_red(f"{i.id}\t{i.lemma_1}")
 
 
 if __name__ == "__main__":

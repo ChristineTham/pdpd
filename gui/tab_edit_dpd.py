@@ -1,17 +1,19 @@
-"""Render tab to edit DpdHeadwords table in the database."""
+"""Render tab to edit DpdHeadword table in the database."""
 
-from completion_combo import CompletionCombo
-from functions_db import get_verb_values
-from functions_db import get_case_values
-from functions_db import get_root_key_values
-from functions_db import get_family_word_values
-from functions_db import get_family_set_values
-from functions_db import get_compound_type_values
-from functions_db import get_patterns
+from gui.completion_combo import CompletionCombo
+from gui.functions_db import get_verb_values
+from gui.functions_db import get_case_values
+from gui.functions_db import get_root_key_values
+from gui.functions_db import get_family_word_values
+from gui.functions_db import get_family_set_values
+from gui.functions_db import get_compound_type_values
+from gui.functions_db import get_patterns
+from gui.tooltips import sutta_codes, types_of_comp
 from tools.pos import POS
 
 
 def make_tab_edit_dpd(db_session, sg, username):
+    
 
     VERB_VALUES = get_verb_values(db_session)
     TRANS_VALUES = ["", "trans", "intrans", "ditrans"]
@@ -33,31 +35,6 @@ def make_tab_edit_dpd(db_session, sg, username):
 
 
     add_word_layout = [
-        [
-            sg.Text("show fields", size=(15, 1)),
-            sg.Radio(
-                "all", "group1",
-                key="show_fields_all",
-                enable_events=True,
-                tooltip="Show the fields relevant to the type of word"),
-            sg.Radio(
-                "root", "group1",
-                key="show_fields_root",
-                enable_events=True,
-                tooltip="Show the fields relevant to the type of word"),
-            sg.Radio(
-                "compound", "group1",
-                key="show_fields_compound",
-                enable_events=True,
-                tooltip="Show the fields relevant to the type of word"),
-            sg.Radio(
-                "word", "group1",
-                key="show_fields_word",
-                enable_events=True,
-                tooltip="Show the fields relevant to the type of word"),
-            sg.Text(
-                "", key="show_fields_error", size=(50, 1), text_color="red")
-        ],
         [
             sg.Text("id", size=(15, 1, )),
             sg.Input(
@@ -209,7 +186,7 @@ Leave empty for long compounds."),
                     ROOT_VALUES, key="root_key",
                     size=(10, 1),
                     auto_size_text=False,
-                    tooltip="Root key in DpdRootss table.\n\
+                    tooltip="Root key in DpdRoots table.\n\
 Select a value from the dropdown list.")),
             sg.Text(
                 "", key="root_info", text_color="white",
@@ -310,7 +287,7 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
                 sg.Input(
                     key="family_idioms", size=(50, 1),
                     enable_events=True,
-                    tooltip="Family idioms, seperated by space.")),
+                    tooltip="Family idioms, separated by space.")),
             sg.Text(
                 "", key="family_idioms_error",
                 size=(50, 1), text_color="red")
@@ -448,16 +425,18 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
         [
             sg.Text("search for", size=(15, 1)),
             sg.Input(
-                "", key="search_for", size=(20, 1),
+                "", key="search_for", size=(16, 1),
                 enable_events=True,
                 tooltip="Search for BOLD words in commentaries"),
             sg.Input(
-                "", key="contains", size=(17, 1),
-                tooltip="Search for NOT BOLD words in commentaries"),
+                "", key="contains", size=(16, 1),
+                tooltip="Search for not BOLD words in commentaries"),
             sg.Button(
-                "Search", key="defintions_search_button", font=(None, 13)),
+                "Search", key="definitions_search_button", font=(None, 13)),
             sg.Button(
                 "Clean", key="commentary_clean", font=(None, 13)),
+            sg.Button(
+                "HTML", key="bold_definitions_server", font=(None, 13)),
             sg.Text(
                 "", key="search_for_error", size=(50, 1), text_color="red")
         ],
@@ -542,14 +521,33 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
             sg.Input(
                 key="bold_1", size=(20, 1),
                 tooltip="Bold the word"),
-            sg.Button("Bold", key="bold_1_button", font=(None, 13)),
             sg.Button(
-                "Another Eg",
+                "Bold", key="bold_1_button", font=(None, 13),
+                tooltip="Bold the word in example_1"),
+            sg.Button(
+                "Eg1",
                 key="another_eg_1",
                 tooltip="Find another sutta example",
                 font=(None, 13)),
-            sg.Button("Lower", key="example_1_lower", font=(None, 13)),
-            sg.Button("Clean", key="example_1_clean", font=(None, 13)),
+            sg.Button(
+                "Lwr", key="example_1_lower", font=(None, 13),
+                tooltip="Lowercase example_1"),
+            sg.Button(
+                "Clean", key="example_1_clean", font=(None, 13),
+                tooltip="Clean example_1"),
+            sg.Button(
+                "S", key="example_1_save", font=(None, 13),
+                tooltip="Save example_1"),
+            sg.Button(
+                "L", key="example_1_load", font=(None, 13),
+                tooltip="Load into example_1"),
+            sg.Button(
+                "Cl", key="example_1_clear", font=(None, 13),
+                tooltip="Clear example_1"),
+            sg.Button(
+                "Sw", key="example_swap", font=(None, 13),
+                tooltip="Swap example_1 and example_2"),
+
             sg.Text("", key="bold_1_error", size=(50, 1), text_color="red")
         ],
         [
@@ -575,6 +573,7 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
             sg.pin(
                 sg.Multiline(
                     key="example_2", size=(49, 5),
+                    enable_events=True,
                     tooltip="Sutta example. Add all sandhi apostrophes.")),
             sg.Text(
                 "", key="example_2_error", size=(50, 1), text_color="red")
@@ -586,15 +585,30 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
                     key="bold_2", size=(20, 1),
                     tooltip="Bold the word")),
             sg.pin(
-                sg.Button("Bold", key="bold_2_button", font=(None, 13))),
+                sg.Button(
+                    "Bold", key="bold_2_button", font=(None, 13),
+                    tooltip="Bold the word in example_2")),
             sg.pin(
                 sg.Button(
-                    "Another Eg", key="another_eg_2", font=(None, 13),
+                    "Eg2", key="another_eg_2", font=(None, 13),
                     tooltip="Find another sutta example")),
             sg.pin(
-                sg.Button("Lower", key="example_2_lower", font=(None, 13))),
+                sg.Button(
+                    "Lwr", key="example_2_lower", font=(None, 13),
+                    tooltip="Lowercase example_2")),
             sg.pin(
-                sg.Button("Clean", key="example_2_clean", font=(None, 13))),
+                sg.Button(
+                    "Clean", key="example_2_clean", font=(None, 13),
+                    tooltip="Clean example_2")),
+            sg.Button(
+                "S", key="example_2_save", font=(None, 13),
+                tooltip="Save example_2"),
+            sg.Button(
+                "L", key="example_2_load", font=(None, 13),
+                tooltip="Load into example_2"),
+            sg.Button(
+                "Cl", key="example_2_clear", font=(None, 13),
+                tooltip="Clear example_2"),
             sg.Text("", key="bold_2_error", size=(50, 1), text_color="red")
         ],
         [
@@ -626,6 +640,45 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
 
     tab_edit_dpd = [
         [
+            sg.Text("show fields", size=(15, 1)),
+            sg.Radio(
+                "all", "group1",
+                key="show_fields_all",
+                enable_events=True,
+                tooltip="Show the fields relevant to the type of word"),
+            sg.Radio(
+                "root", "group1",
+                key="show_fields_root",
+                enable_events=True,
+                tooltip="Show the fields relevant to the type of word"),
+            sg.Radio(
+                "compound", "group1",
+                key="show_fields_compound",
+                enable_events=True,
+                tooltip="Show the fields relevant to the type of word"),
+            sg.Radio(
+                "word", "group1",
+                key="show_fields_word",
+                enable_events=True,
+                tooltip="Show the fields relevant to the type of word"),
+            sg.Text(
+                "*sutta codes↓",
+                pad=(20, 0),
+                tooltip=sutta_codes
+            ),
+            sg.Text(
+                "**↓",
+                pad=(2, 0),
+                tooltip=types_of_comp,
+                visible=username == "deva",
+            ),
+            sg.Text(
+                "", key="show_fields_error", size=(50, 1), text_color="red")
+        ],
+        [
+            sg.HSep(),
+        ],
+        [
             sg.Column(
                 add_word_layout,
                 scrollable=True,
@@ -642,7 +695,7 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
             # db buttons
             sg.Text("db buttons", size=(15, 1)),
             sg.Button(
-                "Clone", tooltip="Clone a word from the db"),
+                "Clone", tooltip="Clone a word from the db", font=(None, 10)),
             sg.Input(
                 key="word_to_clone_edit",
                 size=(15, 1),
@@ -650,71 +703,97 @@ kar + *āpe  > kārāpe > karāpe (caus, irreg).")),
                 tooltip="Enter id or lemma_1"
             ),
             sg.Button(
-                "Edit", key="edit_button", tooltip="Edit a word in the db"),
+                "Edit", key="edit_button", tooltip="Edit a word in the db", font=(None, 10)),
             sg.Button(
                 "Test", key="test_internal_button",
-                tooltip="Run internal tests"),
+                tooltip="Run internal tests", font=(None, 10)),
             sg.Button(
                 "Update DB", key="update_db_button1",
                 tooltip="Add a new word or update existing word in the db",
-                visible=username == "primary_user"),
+                visible=username == "primary_user",
+                font=(None, 10)),
             sg.Button(
                 "Update DB", key="update_db_button2",
                 tooltip="Add a new word or update existing word in the db",
-                visible=username == "deva"),
+                visible=username == "deva",
+                font=(None, 10)),
             sg.Button(
                 "Delete", key="delete_button",
                 tooltip="Delete a word from the db. Careful!",
-                mouseover_colors="red"),
+                mouseover_colors="red",
+                font=(None, 10)),
             sg.Button(
                 "Sandhi", key="update_sandhi_button",
-                tooltip="Update list of words with sandhi apostophes"),
+                tooltip="Update list of words with sandhi apostophes",
+                font=(None, 10)),
             sg.Button(
                 "Refresh DB", key="refresh_db_session_button",
-                tooltip="Refresh the db session after making external changes."),
+                tooltip="Refresh the db session after making external changes.",
+                font=(None, 10)),
             sg.Button(
                 "Pass2", key="pass2_button",
-                tooltip="Add sutta examples to words in DB."),
+                tooltip="Add sutta examples to words in DB.",
+                font=(None, 10)),
+            sg.Button(
+                "Open Last", key="open_last_word",
+                tooltip="open the last word edited",
+                font=(None, 10)),
             sg.Button(
                 "Log", key="open_corrections_button",
                 tooltip="open corrections tsv in code",
-                visible=username == "deva"),
+                visible=username == "deva",
+                font=(None, 10)),
         ],
         [
             # gui buttons
             sg.Text("gui buttons", size=(15, 1)),
             sg.Button(
                 "Open Tests", key="open_tests_button",
-                tooltip="Open TSV file of internal tests"),
+                tooltip="Open TSV file of internal tests",
+                font=(None, 10)),
             sg.Button(
                 "Sk Roots", key="open_sanskrit_roots_button",
-                tooltip="Open TSV file of internal tests"),
+                tooltip="Open TSV file of internal tests",
+                font=(None, 10)),
             sg.Button(
                 "Debug", key="debug_button",
-                tooltip="Print the current values in the terminal"),
+                tooltip="Print the current values in the terminal",
+                font=(None, 10)),
             sg.Button(
                 "Stash", key="stash_button",
-                tooltip="Stash the word to edit it again later"),
+                tooltip="Stash the word to edit it again later",
+                font=(None, 10)),
             sg.Button(
                 "Unstash", key="unstash_button",
                 tooltip="Unstash a word to edit it again",
-                mouseover_colors="red"),
+                mouseover_colors="red",
+                font=(None, 10)),
             sg.Button(
                 "Split", key="split_button",
+                visible=username == "primary_user",
                 tooltip="Stash the word and open a copy to edit",
-                mouseover_colors="red"),
+                mouseover_colors="red",
+                font=(None, 10)),
             sg.Button(
                 "HTML", key="html_summary_button",
-                tooltip="See a html summary of a word in db"),
+                tooltip="See a html summary of a word in db",
+                font=(None, 10)),
             sg.Button(
                 "Save", key="save_state_button",
                 visible=username == "primary_user",
-                tooltip="Save the current state of the GUI"),
+                tooltip="Save the current state of the GUI",
+                font=(None, 10)),
             sg.Button(
-                "Clear", key="clear_button", tooltip="Clear all the fields"),
+                "Clear", key="clear_button", tooltip="Clear all the fields",
+                font=(None, 10)),
+            sg.Button(
+                "Next Word", key="add_word_from_csv", tooltip="Add next new word from csv file",
+                visible=username == "deva",
+                font=(None, 10)),
             sg.Button(
                 "Save and Close", key="save_and_close_button",
-                tooltip="Save the current state, backup to tsv and close"),
+                tooltip="Save the current state, backup to tsv and close",
+                font=(None, 10)),
         ]
     ]
 

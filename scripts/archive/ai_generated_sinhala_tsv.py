@@ -3,21 +3,22 @@
 """making ai generated translation into Sinhala and saving to csv and xlsx"""
 
 import pandas as pd
-import openai
 import csv
 import re
-from rich.prompt import Prompt
+from openai import OpenAI
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 from tools.paths import ProjectPaths
 from tools.tsv_read_write import write_tsv_list
-from tools.meaning_construction import make_meaning
+from tools.meaning_construction import make_meaning_combo
 from sqlalchemy import and_, or_
+from dps.tools.ai_related import load_openai_config
 
 from timeout_decorator import timeout, TimeoutError as TimeoutDecoratorError
 
-from tools.configger import config_test_option, config_read, config_update
+api_key = load_openai_config()
+client = OpenAI(api_key=api_key)
 
 commentary_list = [
             "VINa", "VINt", "DNa", "MNa", "SNa", "SNt", "ANa", 
@@ -36,24 +37,24 @@ def main():
     pth = ProjectPaths()
     db_session = get_db_session(pth.dpd_db_path)
 
-    conditions = [DpdHeadwords.source_1.like(f"%{comment}%") for comment in commentary_list]
+    conditions = [DpdHeadword.source_1.like(f"%{comment}%") for comment in commentary_list]
     combined_condition = or_(*conditions)
 
-    db = db_session.query(DpdHeadwords).filter(
+    db = db_session.query(DpdHeadword).filter(
             and_(
-                DpdHeadwords.meaning_1 != '',
-                DpdHeadwords.example_1 != '',
+                DpdHeadword.meaning_1 != '',
+                DpdHeadword.example_1 != '',
                 ~combined_condition
             )
-        ).order_by(DpdHeadwords.ebt_count.desc()).limit(1000).all()
+        ).order_by(DpdHeadword.ebt_count.desc()).limit(1000).all()
 
     data = []
     for counter, i in enumerate(db):
-        meaning = make_meaning(i)
+        meaning = make_meaning_combo(i)
         if i.meaning_1:
-            test = "✓"
+            test = "✔"
         else:
-            test = "✗"
+            test = "✘"
 
         if i.example_1:
             example = i.example_1
@@ -75,25 +76,10 @@ def main():
     write_tsv_list("temp/dpd_sinhala_machine.tsv", headers, data)
 
 
-
-def load_openia_config():
-    """Add a OpenAI key if one doesn't exist, or return the key if it does."""
-
-    if not config_test_option("openia", "key"):
-        openia_config = Prompt.ask("[yellow]Enter your openai key (or ENTER for None)")
-        config_update("openia", "key", openia_config)
-    else:
-        openia_config = config_read("openia", "key")
-    return openia_config
-
-
-# Setup OpenAI API key
-openai.api_key = load_openia_config()
-
 @timeout(10, timeout_exception=TimeoutDecoratorError)  # Setting a 10-second timeout
 def call_openai(messages):
-    return openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-0125",
+    return client.chat.completions.create(
+        model="gpt-4o-mini",
         messages=messages
     )
 

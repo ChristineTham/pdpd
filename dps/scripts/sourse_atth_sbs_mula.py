@@ -2,10 +2,10 @@
 
 """ Filter words which has only commentary example in DPD but sutta example in SBS"""
 
-from db.models import DpdHeadwords
+from db.models import DpdHeadword
 from tools.paths import ProjectPaths
 from dps.tools.paths_dps import DPSPaths
-from db.get_db_session import get_db_session
+from db.db_helpers import get_db_session
 import csv
 import os
 import shutil
@@ -26,7 +26,7 @@ def save_filtered_words():
     pth = ProjectPaths()
     dpspth = DPSPaths()
     db_session = get_db_session(pth.dpd_db_path)
-    dpd_db = db_session.query(DpdHeadwords).options(joinedload(DpdHeadwords.sbs), joinedload(DpdHeadwords.ru)).all()
+    dpd_db = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs), joinedload(DpdHeadword.ru)).all()
 
     commentary_list = [
             "VINa", "VINt", "DNa", "MNa", "SNa", "SNt", "ANa", 

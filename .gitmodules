@@ -2,9 +2,23 @@
 	path = resources/tipitaka-xml
 	url = https://github.com/vipassanatech/tipitaka-xml
 	ignore = untracked
+
 [submodule "resources/tpr_downloads"]
 	path = resources/tpr_downloads
 	url = https://github.com/bksubhuti/tpr_downloads
+
 [submodule "resources/bw2"]
 	path = resources/bw2
 	url = https://github.com/thebuddhaswords/BW2.git
+	
+[submodule "resources/sc-data"]
+	path = resources/sc-data
+	url = https://github.com/digitalpalidictionary/sc-data.git
+
+[submodule "resources/bjt"]
+	path = resources/bjt
+	url = https://github.com/pathnirvana/tipitaka.lk.git
+
+[submodule "resources/deconstructor_output"]
+	path = resources/deconstructor_output
+	url = https://github.com/digitalpalidictionary/deconstructor_output.git

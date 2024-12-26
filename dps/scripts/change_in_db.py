@@ -7,13 +7,13 @@ import re
 
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm import aliased
-from sqlalchemy import and_, or_, null
+from sqlalchemy import and_, or_, null, not_
 from sqlalchemy import update
 from sqlalchemy.orm import joinedload
 
-from db.models import DpdHeadwords, SBS, Russian
+from db.models import DpdHeadword, SBS, Russian
 from tools.paths import ProjectPaths
-from db.get_db_session import get_db_session
+from db.db_helpers import get_db_session
 
 from rich.console import Console
 
@@ -34,8 +34,8 @@ def filter_and_update(
     related_alias = aliased(related_table)
 
     # Find the words that match the filter criteria
-    words_to_update = db_session.query(DpdHeadwords, related_alias).join(
-        related_alias, related_alias.id == DpdHeadwords.id
+    words_to_update = db_session.query(DpdHeadword, related_alias).join(
+        related_alias, related_alias.id == DpdHeadword.id
     ).filter(column_to_filter == filter_value).all()
 
     for __word__, related in words_to_update:
@@ -67,8 +67,8 @@ def filter_and_add(
     related_alias = aliased(related_table)
 
     # Find the words that match the filter criteria
-    words_to_update = db_session.query(DpdHeadwords, related_alias).join(
-        related_alias, related_alias.id == DpdHeadwords.id
+    words_to_update = db_session.query(DpdHeadword, related_alias).join(
+        related_alias, related_alias.id == DpdHeadword.id
     ).filter(
         and_(
             column_to_filter.contains(filter_value),
@@ -97,11 +97,11 @@ def filter_and_add(
 def update_notes():
 
     # "Kacc %" "see %" "or %"
-    db = db_session.query(DpdHeadwords).outerjoin(
-    Russian, DpdHeadwords.id == Russian.id
+    db = db_session.query(DpdHeadword).outerjoin(
+    Russian, DpdHeadword.id == Russian.id
         ).filter(
-            DpdHeadwords.notes.like("agent noun used verbally see Perniola §292"),
-        ).order_by(DpdHeadwords.ebt_count.desc()).all()
+            DpdHeadword.notes.like("agent noun used verbally see Perniola §292"),
+        ).order_by(DpdHeadword.ebt_count.desc()).all()
 
     for counter, i in enumerate(db):
 
@@ -136,10 +136,77 @@ def update_notes():
         # db_session.commit()
 
 
+def update_column_for_some_criteria(source_value):
+    # Query the database to find the rows that match the conditions
+    rows_to_update_sbs = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs)).outerjoin(SBS).filter(
+            or_(
+                SBS.sbs_source_1 == source_value,
+                SBS.sbs_source_2 == source_value,
+                SBS.sbs_source_3 == source_value,
+                SBS.sbs_source_4 == source_value,
+            ),
+    ).all()
+
+    # Get the IDs of rows_to_update_sbs
+    ids_to_exclude = [row.id for row in rows_to_update_sbs]
+
+
+    rows_to_update = db_session.query(DpdHeadword).options(joinedload(DpdHeadword.sbs)).outerjoin(SBS).filter(
+            and_(
+                not_(DpdHeadword.id.in_(ids_to_exclude)),
+                or_(
+                    DpdHeadword.source_1 == source_value,
+                    DpdHeadword.source_2 == source_value,
+                ),
+            ),
+    ).all()
+
+    count_changed = 0
+    count_changed_sbs = 0
+    count_added = 0
+    count_sbs_patimokkha = 0
+
+    for __word__ in rows_to_update_sbs:
+        old_value = __word__.sbs.sbs_patimokkha
+        if not old_value:
+            __word__.sbs.sbs_patimokkha = "vib"
+
+            console.print(f"[bold bright_yellow]{__word__.id} {__word__.lemma_1} {__word__.sbs.sbs_patimokkha}")
+
+            count_changed_sbs += 1
+        else:
+            count_sbs_patimokkha += 1
+
+    for __word__ in rows_to_update:
+        if not __word__.sbs:
+            # If SBS row does not exist, create a new one
+            __word__.sbs = SBS(id=__word__.id, sbs_patimokkha="vib_")
+            console.print(f"[bold bright_yellow]Added {__word__.id} {__word__.lemma_1} {__word__.sbs.sbs_patimokkha}")
+            count_added += 1
+        else:
+            old_value = __word__.sbs.sbs_patimokkha
+            if not old_value:
+                __word__.sbs.sbs_patimokkha = "vib_"
+
+                console.print(f"[bold bright_yellow]{__word__.id} {__word__.lemma_1} {__word__.sbs.sbs_patimokkha}")
+
+                count_changed += 1
+            else:
+                count_sbs_patimokkha += 1
 
 
 
-column_to_filter = DpdHeadwords.meaning_1
+    console.print(f"[bold bright_green]Total rows fit criteria sbs: {len(rows_to_update_sbs)}")
+    console.print(f"[bold bright_green]Total rows fit criteria: {len(rows_to_update)}")
+    console.print(f"[bold bright_green]Total count of already has: {count_sbs_patimokkha}")
+    console.print(f"[bold bright_green]Total count of changed: {count_changed}")
+    console.print(f"[bold bright_green]Total count of changed sbs: {count_changed_sbs}")
+    console.print(f"[bold bright_green]Total count of added: {count_added}")
+
+    # db_session.commit()
+
+
+column_to_filter = DpdHeadword.meaning_1
 filter_value = "(gram)"
 related_table = Russian
 related_column_to_update = "ru_meaning_raw"
@@ -151,4 +218,6 @@ value_to_update = "(грам) "
 
 # filter_and_add(column_to_filter, filter_value, related_table, related_column_to_update, value_to_update)
 
-update_notes()
+# update_notes()
+
+update_column_for_some_criteria("VIN1.2.2")

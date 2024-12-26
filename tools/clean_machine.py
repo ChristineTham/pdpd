@@ -23,6 +23,9 @@ def clean_machine(text: str, niggahita="ṃ", remove_hyphen=True) -> str:
         text = text.replace("ṁ", "ṃ")
 
     text = text.replace(".", " ")\
+        .replace("<b>", " ")\
+        .replace("</b>", " ")\
+        .replace(",", " ")\
         .replace(",", " ")\
         .replace(";", " ")\
         .replace(":", " ")\
@@ -36,10 +39,10 @@ def clean_machine(text: str, niggahita="ṃ", remove_hyphen=True) -> str:
         .replace('"', "")\
         .replace("!", "")\
         .replace("?", "")\
-        .replace("+", "")\
+        .replace("+", " ")\
         .replace("*", "")\
-        .replace("=", "")\
-        .replace("~", "")\
+        .replace("=", " ")\
+        .replace("~", " ")\
         .replace("﻿", "")\
         .replace("§", " ")\
         .replace("‡", " ")\
@@ -57,13 +60,13 @@ def clean_machine(text: str, niggahita="ṃ", remove_hyphen=True) -> str:
         .replace(">", " ")\
         .replace("^", " ")\
         .replace(" - ", " ")\
-        .replace("–", "")\
+        .replace("–", " ")\
         .replace("—", " ")\
+        .replace("t_", "v")\
         .replace("_", "")\
-        .replace("–", "")\
         .replace("…", " ")\
         .replace("  ", " ")\
-        .replace("॰", "")\
+        .replace("॰", " ")\
         .replace("ï", "i")\
         .replace("ü", "u")\
         .replace("ạ", "a")\
@@ -75,7 +78,19 @@ def clean_machine(text: str, niggahita="ṃ", remove_hyphen=True) -> str:
         .replace("\xa0", "")\
         .replace("\u0306", "")\
         .replace("&", "")\
-        .replace("°", "")
+        .replace("°", "")\
+        .replace("ġ", "g")\
+        .replace("ṟ", "r")\
+        .replace("ṉ", "n")\
+        .replace("ẏ", "y")\
+        .replace("ḥ", "")\
+        .replace("ṛ", "")\
+        .replace("\u0308", "")\
+        .replace("\u035f", "")\
+        .replace("\u0324", "")\
+        .replace("--", " ")\
+        .replace("♦", " ")
+
     
     if remove_hyphen:
         text = text.replace("-", "")\

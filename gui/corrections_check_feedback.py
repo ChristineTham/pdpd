@@ -3,16 +3,16 @@
 """GUI check feedback from corrections.tsv."""
 
 import csv
-import PySimpleGUI as sg
+import PySimpleGUI as sg # type: ignore
 import subprocess
 
 from rich import print
 
-from tools.goldedict_tools import open_in_goldendict
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords
+from tools.goldendict_tools import open_in_goldendict
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword
 
-from tools.meaning_construction import make_meaning
+from tools.meaning_construction import make_meaning_combo
 from tools.meaning_construction import summarize_construction
 from tools.paths import ProjectPaths
 from tools.tsv_read_write import read_tsv_dot_dict, write_tsv_dot_dict
@@ -21,7 +21,7 @@ pth = ProjectPaths()
 db_session = get_db_session(pth.dpd_db_path)
 
 
-def main():
+def open_gui_corrections():
     
     window = make_window()
     db = None
@@ -285,7 +285,7 @@ def open_corrections():
 def make_summary(db):
     word = db.lemma_1
     pos = db.pos
-    meaning = make_meaning(db)
+    meaning = make_meaning_combo(db)
     construction = summarize_construction(db)
     return f"{word}: {pos}. {meaning} [{construction}]"
 
@@ -361,8 +361,8 @@ def find_next_commented(corrections_list, window, values):
 
 
 def load_next_correction(c, window, __values__):
-    db = db_session.query(DpdHeadwords).filter(
-        c.id == DpdHeadwords.id).first()
+    db = db_session.query(DpdHeadword).filter(
+        c.id == DpdHeadword.id).first()
     open_in_goldendict(c.id)
     window["add_id"].update(c.id)
     window["add_summary"].update(make_summary(db))
@@ -406,10 +406,13 @@ def update_corrections_tsv(values, corrections_list, index):
 def apply_all_suggestions():
 
     corrections_list = load_corrections_tsv()
+
+    added_lines_count = 0
+
     for correction in corrections_list:
         if not correction.approved:
-            db = db_session.query(DpdHeadwords).filter(
-                correction.id == DpdHeadwords.id).first()
+            db = db_session.query(DpdHeadword).filter(
+                correction.id == DpdHeadword.id).first()
             if db:
                 id = correction.id
                 field1 = correction.field1
@@ -421,19 +424,23 @@ def apply_all_suggestions():
 
                 if field1 and value1 is not None:
                     setattr(db, field1, value1)
-                    print(f"{id}: {field1} with {value1}")
+                    added_lines_count += 1
+                    print(f"{added_lines_count} {id}: {field1} with {value1}")
                 if field2 and value2 is not None:
                     setattr(db, field2, value2)
-                    print(f"{id}: {field2} with {value2}")
+                    added_lines_count += 1
+                    print(f"{added_lines_count} {id}: {field2} with {value2}")
                 if field3 and value3 is not None:
                     setattr(db, field3, value3)
-                    print(f"{id}: {field3} with {value3}")
+                    added_lines_count += 1
+                    print(f"{added_lines_count} {id}: {field3} with {value3}")
                 
                 db_session.commit()
             else:
                 print(f"Entry with ID {correction.id} not found.")
 
+    print(f"Total number of applied corrections: {added_lines_count}")
 
-if __name__ == "__main__":
-    main()
-    # apply_all_suggestions()
+
+# open_gui_corrections()
+apply_all_suggestions()

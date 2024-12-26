@@ -3,15 +3,15 @@
 import json
 import re
 
-import PySimpleGUI as sg
+import PySimpleGUI as sg # type: ignore
 
 from rich import print
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
-from db.get_db_session import get_db_session
-from db.models import DpdHeadwords, Lookup
-from functions import load_gui_config
+from db.db_helpers import get_db_session
+from db.models import DpdHeadword, Lookup
+from gui.functions import load_gui_config
 from tools.pali_sort_key import pali_list_sorter
 
 
@@ -19,9 +19,9 @@ from tools.paths import ProjectPaths
 
 from tools.cst_sc_text_sets import make_cst_text_list
 from tools.cst_sc_text_sets import make_sc_text_list
-from tools.source_sutta_example import find_source_sutta_example
-from tools.meaning_construction import make_meaning
-from tools.goldedict_tools import open_in_goldendict
+from tools.cst_source_sutta_example import find_source_sutta_example
+from tools.meaning_construction import make_meaning_combo
+from tools.goldendict_tools import open_in_goldendict
 
 
 class Pass2Data():
@@ -296,7 +296,7 @@ def window_options(p2d: Pass2Data):
         ],
         [
             sg.Text("", size = (15,1)),
-            sg.Button("Start", key="pass2_start"),
+            sg.Button("New", key="pass2_new"),
             sg.Button("Yes", key="pass2_yes"),
             sg.Button("No", key="pass2_no"),
             sg.Button("No All", key="pass2_no_all"),
@@ -351,7 +351,9 @@ def pass2_gui(p2d: Pass2Data) -> tuple[Pass2Data, WordData]:
         p2d.pass2_window.refresh()
 
         sutta_examples = find_source_sutta_example(
-            p2d.pth, p2d.book, wd.search_pattern)
+            p2d.book,
+            wd.search_pattern
+        )
         
         if sutta_examples:
             wd.sutta_examples = sutta_examples
@@ -367,7 +369,10 @@ def pass2_gui(p2d: Pass2Data) -> tuple[Pass2Data, WordData]:
                 headwords_list = get_headwords(p2d, word)
                 if headwords_list:
                     check_example_headword(p2d, wd, headwords_list)
-                    if p2d.continue_flag == "yes":
+                    if p2d.continue_flag == "new":
+                        update_main_window(p2d, wd)
+                        return p2d, wd
+                    elif p2d.continue_flag == "yes":
                         update_main_window(p2d, wd)
                         return p2d, wd
                     elif p2d.continue_flag == "exit":
@@ -379,7 +384,10 @@ def pass2_gui(p2d: Pass2Data) -> tuple[Pass2Data, WordData]:
                 headwords_list = get_deconstruction_headwords(p2d, word)
                 if headwords_list:
                     check_example_headword(p2d, wd, headwords_list)
-                    if p2d.continue_flag == "yes":
+                    if p2d.continue_flag == "new":
+                        update_main_window(p2d, wd)
+                        return p2d, wd
+                    elif p2d.continue_flag == "yes":
                         update_main_window(p2d, wd)
                         return p2d, wd
                     elif p2d.continue_flag == "exit":
@@ -452,8 +460,9 @@ def check_example_headword(
 
     if id_list:
         for id in id_list:
-
-            if p2d.continue_flag == "yes":
+            if p2d.continue_flag == "new":
+                return
+            elif p2d.continue_flag == "yes":
                 return
             elif p2d.continue_flag == "exit":
                 return
@@ -464,7 +473,7 @@ def check_example_headword(
 
             wd.update_id(id)
             dpd_headword = p2d.db_session \
-                .query(DpdHeadwords) \
+                .query(DpdHeadword) \
                 .filter_by(id=wd.id) \
                 .first()
             
@@ -497,27 +506,30 @@ def check_example_headword(
                     else:
                         choose_route(p2d, wd, dpd_headword)
 
-                    if p2d.continue_flag in ["exit", "yes"]:
+                    if p2d.continue_flag in ["exit", "yes", "new"]:
                         return
+
+                    if id and dpd_headword:
+                        test_words_in_construction(p2d, wd, dpd_headword)
             
             else:
                 print(id_list)
                 print(f"[red]{id} not found")
 
-            if id and dpd_headword:
-                test_words_in_construction(p2d, wd, dpd_headword)
+            # if id and dpd_headword:
+            #     test_words_in_construction(p2d, wd, dpd_headword)
                 
 
 def has_no_meaning_or_example(
-        headword: DpdHeadwords
+        headword: DpdHeadword
     ) -> bool:
     """"Test the pali_word"""
 
-    # needs an example
-    condition_1 = headword and not headword.example_1
-
     # needs meaning_1
-    condition_2 = headword and not headword.meaning_1
+    condition_1 = headword and not headword.meaning_1
+
+    # needs an example
+    condition_2 = headword and not headword.example_1
 
     if condition_1 or condition_2:
         return True
@@ -529,7 +541,7 @@ def has_no_meaning_or_example(
 def update_gui(
         p2d: Pass2Data,
         wd: WordData,
-        headword: DpdHeadwords
+        headword: DpdHeadword
     ):
     """
     Update the gui with word info.
@@ -549,7 +561,7 @@ def update_gui(
     p2d.pass2_window["pass2_id"].update(value=headword.id)
     p2d.pass2_window["pass2_headword"].update(value=headword.lemma_1)
     p2d.pass2_window["pass2_pos"].update(value=headword.pos)
-    p2d.pass2_window["pass2_meaning"].update(value=f"{make_meaning(headword)}")
+    p2d.pass2_window["pass2_meaning"].update(value=f"{make_meaning_combo(headword)}")
     p2d.pass2_window.refresh()
 
 
@@ -571,7 +583,7 @@ def clear_gui(p2d: Pass2Data):
 def choose_route(
         p2d: Pass2Data,
         wd:WordData,
-        headword: DpdHeadwords
+        headword: DpdHeadword
     ):
     """
     Handle the user response and take necessary action.
@@ -590,8 +602,10 @@ def choose_route(
             p2d.pass2_window.close()
             p2d.continue_flag = "exit"
             break
-        elif event == "pass2_start":
-            pass
+        elif event == "pass2_new":
+            p2d.continue_flag = "new"
+            p2d.pass2_window.close()
+            break
         elif event == "pass2_yes":
             p2d.continue_flag = "yes"
             p2d.pass2_window.close()
@@ -620,7 +634,7 @@ def choose_route(
 def test_words_in_construction(
         p2d: Pass2Data,
         wd: WordData,
-        dpd_headword: DpdHeadwords
+        dpd_headword: DpdHeadword
     ) -> None:
 
     if (
@@ -636,7 +650,10 @@ def test_words_in_construction(
             headwords_list = get_headwords(p2d, word)
             if headwords_list:
                 check_example_headword(p2d, wd, headwords_list)
-                if p2d.continue_flag == "yes":
+                if p2d.continue_flag == "new":
+                    update_main_window(p2d, wd)
+                    return
+                elif p2d.continue_flag == "yes":
                     update_main_window(p2d, wd)
                     return
                 elif p2d.continue_flag == "exit":
@@ -651,45 +668,45 @@ def make_text_list(
         ) -> List[str]:
     cst_text_list = make_cst_text_list(pth, [book])
     sc_text_list = make_sc_text_list(pth, [book])
-    
-    # reverse for better results (temporary)
-    # cst_text_list.reverse()
-    # sc_text_list.reverse()
-    
     full_text_list = cst_text_list + sc_text_list
-
-    # sp_mistakes_list = make_sp_mistakes_list(pth)
-    # variant_list = make_variant_list(pth)
-
-    text_set = set(cst_text_list) | set(sc_text_list)
-    # text_set = text_set - set(sp_mistakes_list)
-    # text_set = text_set - set(variant_list)
+    text_set = set(cst_text_list) | set(sc_text_list)    
     return sorted(text_set, key=lambda x: full_text_list.index(x))
 
 
 def update_main_window(p2d: Pass2Data, wd: WordData):
-    headword = p2d.db_session \
-        .query(DpdHeadwords) \
-        .filter(DpdHeadwords.id == wd.id) \
-        .first()
-    if headword:
-        attrs = headword.__dict__
-        for key in attrs.keys():
-            if key in p2d.values:
-                p2d.main_window[key].update(attrs[key])
-
-        # move the commentary to example2
-        if headword.example_1:
-            p2d.main_window["source_2"].update(value=headword.source_1)
-            p2d.main_window["sutta_2"].update(value=headword.sutta_1)
-            p2d.main_window["example_2"].update(value=headword.example_1)
-
-        # update example 1, commentary and bold
+    """Update the main window if
+    - continue_flag is "new" 
+    - continue_flag is "yes".
+    """
+    if p2d.continue_flag == "new":
+        p2d.main_window["lemma_1"].update(value=wd.word)
         p2d.main_window["source_1"].update(value=wd.source)
         p2d.main_window["sutta_1"].update(value=wd.sutta)
         p2d.main_window["example_1"].update(value=wd.example)
-        p2d.main_window["bold_1"].update(value=wd.word)
-        p2d.main_window["search_for"].update(wd.word[:-1])
+
+    elif p2d.continue_flag == "yes":
+        headword = p2d.db_session \
+            .query(DpdHeadword) \
+            .filter(DpdHeadword.id == wd.id) \
+            .first()
+        if headword:
+            attrs = headword.__dict__
+            for key in attrs.keys():
+                if key in p2d.values:
+                    p2d.main_window[key].update(attrs[key])
+
+            # move the commentary to example2
+            if headword.example_1:
+                p2d.main_window["source_2"].update(value=headword.source_1)
+                p2d.main_window["sutta_2"].update(value=headword.sutta_1)
+                p2d.main_window["example_2"].update(value=headword.example_1)
+
+            # update example 1, commentary and bold
+            p2d.main_window["source_1"].update(value=wd.source)
+            p2d.main_window["sutta_1"].update(value=wd.sutta)
+            p2d.main_window["example_1"].update(value=wd.example)
+            p2d.main_window["bold_1"].update(value=wd.word)
+            p2d.main_window["search_for"].update(wd.word[:-1])
 
 
 def is_phrase_exception(p2d, wd):
@@ -707,3 +724,7 @@ if __name__ == "__main__":
     window = sg.Window("", [])  # just a placeholder
     p2d = Pass2Data(pth, db_session, window, {}, "mn2")
     pass2_gui(p2d)
+
+    # text_list = make_text_list(pth, "mn2")
+    # print(text_list.index("paṇītasaṅkhātataraṃ"))
+    

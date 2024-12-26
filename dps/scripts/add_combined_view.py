@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Add combined view into db which have DpdHeadwords, Russian, SBS tables and ebt_count together."""
+"""Add combined view into db which have DpdHeadword, Russian, SBS tables and ebt_count together."""
 
 from sqlalchemy import create_engine, text
 from tools.paths import ProjectPaths
@@ -30,6 +30,7 @@ def main():
                 COALESCE(sbs.sbs_class, '') AS class,
                 COALESCE(sbs.sbs_class_anki, '') AS anki,
                 COALESCE(sbs.sbs_category, '') AS categ,
+                COALESCE(sbs.sbs_patimokkha, '') AS pat,
                 COALESCE(sbs.sbs_index, '') AS PER,
                 COALESCE(dpd_headwords.lemma_1, '') AS lemma_1, 
                 COALESCE(dpd_headwords.lemma_2, '') AS lemma_2,  
